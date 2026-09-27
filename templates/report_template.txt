@@ -1,0 +1,34 @@
+======================================================================
+{{ title }}
+======================================================================
+Generated: {{ generated_at }}
+Source Spreadsheets: {{ files|length }} files processed
+
+----------------------------------------------------------------------
+KEY PERFORMANCE INDICATORS
+----------------------------------------------------------------------
+{% for metric in metrics %}
+* {{ metric.label }}: {{ metric.formatted_value }}
+{% endfor %}
+
+{% if breakdown and breakdown.rows %}
+----------------------------------------------------------------------
+SUMMARY BREAKDOWN BY {{ breakdown.group_by|upper }}
+----------------------------------------------------------------------
+{{ breakdown.group_by|capitalize | string | ljust(20) }}{% for h in breakdown.headers %}{{ h | string | rjust(18) }}{% endfor %}
+{{ "-" * 70 }}
+{% for row in breakdown.rows %}
+{{ row.group | string | ljust(20) }}{% for val in row.cells %}{{ val | string | rjust(18) }}{% endfor %}
+{% endfor %}
+{% endif %}
+
+----------------------------------------------------------------------
+PROCESSED SPREADSHEETS
+----------------------------------------------------------------------
+{% for f in files %}
+- {{ f.filename }}: {{ f.row_count }} rows parsed
+{% endfor %}
+
+======================================================================
+Report generated automatically by excel-email-reporter.
+======================================================================

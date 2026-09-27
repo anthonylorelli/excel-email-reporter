@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "excel-email-reporter"
+version = "0.1.0"
+description = "Export and aggregate data from Excel spreadsheets and send formatted HTML/text email reports"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "pandas>=2.0.0",
+    "openpyxl>=3.1.0",
+    "jinja2>=3.1.0",
+    "pyyaml>=6.0.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[project.scripts]
+excel-report = "src.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

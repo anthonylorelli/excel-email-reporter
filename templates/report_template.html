@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ title }}</title>
+  <style>
+    /* Email client resets */
+    body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+    img { -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
+    body { height: 100% !important; margin: 0 !important; padding: 0 !important; width: 100% !important; background-color: #f4f6f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+    
+    /* Layout */
+    .wrapper { width: 100%; table-layout: fixed; background-color: #f4f6f9; padding: 24px 0; }
+    .main-card { background-color: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0; overflow: hidden; margin: 0 auto; max-width: 680px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
+    .header { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); color: #ffffff; padding: 32px 28px; }
+    .header h1 { margin: 0 0 8px 0; font-size: 22px; font-weight: 700; letter-spacing: -0.3px; color: #ffffff; }
+    .header p { margin: 0; font-size: 13px; color: #94a3b8; }
+    .content { padding: 28px; }
+    
+    /* Section Headers */
+    .section-title { font-size: 15px; font-weight: 700; color: #1e293b; text-transform: uppercase; letter-spacing: 0.5px; margin: 24px 0 12px 0; border-bottom: 2px solid #e2e8f0; padding-bottom: 6px; }
+    .section-title:first-child { margin-top: 0; }
+    
+    /* Metric Cards Grid */
+    .metrics-table { width: 100%; margin-bottom: 24px; border-collapse: separate; border-spacing: 10px; }
+    .metric-card { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 16px; text-align: left; }
+    .metric-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; margin-bottom: 6px; }
+    .metric-value { font-size: 22px; font-weight: 700; color: #0f172a; margin: 0; }
+    
+    /* Tables */
+    .data-table { width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 13px; }
+    .data-table th { background-color: #f1f5f9; color: #475569; font-weight: 600; text-align: left; padding: 10px 12px; border-bottom: 1px solid #cbd5e1; }
+    .data-table th.num, .data-table td.num { text-align: right; }
+    .data-table td { padding: 10px 12px; border-bottom: 1px solid #e2e8f0; color: #334155; }
+    .data-table tr:nth-child(even) td { background-color: #fbfcfe; }
+    .data-table tr.total-row td { font-weight: 700; background-color: #f1f5f9; border-top: 2px solid #cbd5e1; color: #0f172a; }
+    
+    /* Badges */
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600; }
+    .badge-success { background-color: #dcfce7; color: #15803d; }
+    .badge-info { background-color: #e0f2fe; color: #0369a1; }
+    .badge-warning { background-color: #fef3c7; color: #b45309; }
+    
+    /* Ingested Files List */
+    .file-pill { display: inline-block; background-color: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 4px; padding: 4px 10px; font-size: 12px; color: #475569; margin: 3px 4px 3px 0; }
+    
+    /* Footer */
+    .footer { padding: 20px 28px; background-color: #f8fafc; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8; text-align: center; }
+    .footer p { margin: 4px 0; }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+      <tr>
+        <td align="center">
+          <div class="main-card">
+            <!-- Header -->
+            <div class="header">
+              <h1>{{ title }}</h1>
+              <p>Generated on {{ generated_at }} &bull; Source: {{ files|length }} spreadsheet{{ 's' if files|length != 1 else '' }}</p>
+            </div>
+
+            <!-- Content -->
+            <div class="content">
+              
+              <!-- Metrics Cards -->
+              {% if metrics %}
+              <div class="section-title">Key Performance Indicators</div>
+              <table role="presentation" class="metrics-table">
+                <tr>
+                  {% for metric in metrics %}
+                  <td width="{{ (100 / metrics|length)|round|int }}%" class="metric-card">
+                    <div class="metric-label">{{ metric.label }}</div>
+                    <div class="metric-value">{{ metric.formatted_value }}</div>
+                  </td>
+                  {% if loop.index is divisibleby 2 and not loop.last %}
+                </tr><tr>
+                  {% endif %}
+                  {% endfor %}
+                </tr>
+              </table>
+              {% endif %}
+
+              <!-- Grouped Breakdown Table -->
+              {% if breakdown and breakdown.rows %}
+              <div class="section-title">Summary Breakdown by {{ breakdown.group_by|capitalize }}</div>
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>{{ breakdown.group_by|capitalize }}</th>
+                    {% for h in breakdown.headers %}
+                    <th class="num">{{ h }}</th>
+                    {% endfor %}
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in breakdown.rows %}
+                  <tr>
+                    <td><strong>{{ row.group }}</strong></td>
+                    {% for val in row.cells %}
+                    <td class="num">{{ val }}</td>
+                    {% endfor %}
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+              {% endif %}
+
+              <!-- Recent Detail Rows -->
+              {% if detail_rows %}
+              <div class="section-title">Detailed Records Preview (Sample of {{ detail_rows|length }} rows)</div>
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    {% for col in detail_headers %}
+                    <th {% if col in numeric_columns %}class="num"{% endif %}>{{ col|capitalize }}</th>
+                    {% endfor %}
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in detail_rows %}
+                  <tr>
+                    {% for col in detail_headers %}
+                    <td {% if col in numeric_columns %}class="num"{% endif %}>
+                      {% if col == 'status' %}
+                        {% if row[col] in ['Completed', 'Delivered'] %}
+                          <span class="badge badge-success">{{ row[col] }}</span>
+                        {% elif row[col] in ['Shipped', 'In Transit'] %}
+                          <span class="badge badge-info">{{ row[col] }}</span>
+                        {% else %}
+                          <span class="badge badge-warning">{{ row[col] }}</span>
+                        {% endif %}
+                      {% else %}
+                        {{ row[col] }}
+                      {% endif %}
+                    </td>
+                    {% endfor %}
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+              {% endif %}
+
+              <!-- Ingested Files Info -->
+              <div class="section-title">Data Ingestion Details</div>
+              <p style="font-size: 12px; color: #64748b; margin: 4px 0 10px 0;">The following spreadsheets were parsed and consolidated for this report:</p>
+              <div>
+                {% for f in files %}
+                <span class="file-pill">&#128196; <strong>{{ f.filename }}</strong> ({{ f.row_count }} rows)</span>
+                {% endfor %}
+              </div>
+
+            </div>
+
+            <!-- Footer -->
+            <div class="footer">
+              <p>This automated report was generated by <strong>excel-email-reporter</strong>.</p>
+              <p>For questions or custom reporting requirements, contact your system administrator.</p>
+            </div>
+          </div>
+        </td>
+      </tr>
+    </table>
+  </div>
+</body>
+</html>
