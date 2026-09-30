@@ -68,10 +68,32 @@ class ExcelExtractor:
                 else:
                     df = df[df[filter_col] == allowed_values]
 
-        # Add origin filename column
+        # Drop columns that are completely empty / unnamed
+        unnamed_empty = [c for c in df.columns if str(c).startswith("Unnamed:") and df[c].isna().all()]
+        if unnamed_empty:
+            df = df.drop(columns=unnamed_empty)
+
+        # Add origin metadata columns
         df["_source_file"] = filepath.name
+        df["_course_name"] = self.extract_course_name(filepath)
 
         return df, raw_count
+
+    def extract_course_name(self, filepath: Path) -> str:
+        """Extracts course title from the header row or filename."""
+        try:
+            raw_top = pd.read_excel(filepath, sheet_name=self.sheet_name, nrows=1, header=None)
+            for val in raw_top.iloc[0]:
+                if pd.notna(val) and "assignment data" in str(val).lower():
+                    return str(val).split(" - ")[0].strip()
+        except Exception:
+            pass
+
+        # Fallback to filename parsing
+        stem = filepath.stem
+        if " grades" in stem:
+            return stem.split(" grades")[0].strip()
+        return stem
 
     def process_all(self, explicit_files: Optional[List[str]] = None) -> Tuple[pd.DataFrame, List[FileIngestSummary]]:
         """Processes all discovered spreadsheets and aggregates results."""

@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Student Reports Drafts Dashboard</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #f8fafc; color: #1e293b; margin: 0; padding: 24px; }
+    .container { max-width: 1100px; margin: 0 auto; }
+    .header { background: #0f172a; color: white; padding: 24px 32px; border-radius: 8px; margin-bottom: 24px; }
+    .header h1 { margin: 0 0 8px 0; font-size: 24px; }
+    .header p { margin: 0; color: #94a3b8; font-size: 14px; }
+    
+    .course-card { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 24px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .course-header { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; margin-bottom: 16px; }
+    .course-title { font-size: 18px; font-weight: 700; color: #0f172a; }
+    .course-stats { font-size: 13px; color: #64748b; }
+    
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; background: #f1f5f9; padding: 10px 12px; color: #475569; font-weight: 600; border-bottom: 1px solid #cbd5e1; }
+    th.num, td.num { text-align: right; }
+    td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; }
+    tr:hover td { background-color: #f8fafc; }
+    
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 700; }
+    .grade-A { background: #dcfce7; color: #15803d; }
+    .grade-B { background: #e0f2fe; color: #0369a1; }
+    .grade-C { background: #fef3c7; color: #b45309; }
+    .grade-D { background: #ffedd5; color: #c2410c; }
+    .grade-F { background: #fee2e2; color: #b91c1c; }
+    
+    .btn { display: inline-block; padding: 4px 10px; font-size: 11px; font-weight: 600; border-radius: 4px; text-decoration: none; margin-right: 4px; }
+    .btn-preview { background: #3b82f6; color: white; }
+    .btn-eml { background: #10b981; color: white; }
+    .btn:hover { opacity: 0.9; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Student Progress Reports &mdash; Generated Drafts</h1>
+      <p>Total Courses: {{ courses|length }} &bull; Total Student Drafts: {{ total_students }} &bull; Generated {{ generated_at }}</p>
+    </div>
+
+    {% for course in courses %}
+    <div class="course-card">
+      <div class="course-header">
+        <div class="course-title">{{ course.name }}</div>
+        <div class="course-stats">
+          {{ course.students|length }} Students &bull; Class Average: <strong>{{ course.class_average }}%</strong> &bull; Median: <strong>{{ course.class_median }}%</strong>
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Student Name</th>
+            <th>Email</th>
+            <th class="num">Overall %</th>
+            <th>Grade</th>
+            <th class="num">Missing Work</th>
+            <th class="num">Draft Files</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for student in course.students %}
+          <tr>
+            <td><strong>{{ student.full_name }}</strong></td>
+            <td style="color: #64748b;">{{ student.email }}</td>
+            <td class="num"><strong>{{ student.overall_percent }}%</strong></td>
+            <td>
+              <span class="badge grade-{{ student.letter_grade[0] }}">{{ student.letter_grade }}</span>
+            </td>
+            <td class="num">
+              {% if student.total_missing > 0 %}
+                <span style="color: #b45309; font-weight: 600;">{{ student.total_missing }} item(s)</span>
+              {% else %}
+                <span style="color: #15803d;">None</span>
+              {% endif %}
+            </td>
+            <td class="num">
+              <a class="btn btn-preview" href="{{ student.html_rel_path }}" target="_blank">View HTML</a>
+              <a class="btn btn-eml" href="{{ student.eml_rel_path }}" download>Open EML Draft</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endfor %}
+  </div>
+</body>
+</html>

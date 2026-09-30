@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Progress Report: {{ student.full_name }} - {{ student.course_name }}</title>
+  <style>
+    body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+    body { margin: 0 !important; padding: 0 !important; width: 100% !important; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+    
+    .wrapper { width: 100%; background-color: #f1f5f9; padding: 24px 0; }
+    .card { background-color: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0; overflow: hidden; margin: 0 auto; max-width: 650px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
+    
+    /* Header */
+    .header { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); color: #ffffff; padding: 28px 24px; text-align: left; }
+    .header h1 { margin: 0 0 6px 0; font-size: 20px; font-weight: 700; color: #ffffff; }
+    .header p { margin: 0; font-size: 13px; color: #94a3b8; }
+    
+    .content { padding: 24px; }
+    
+    /* Grade Spotlight Card */
+    .grade-spotlight { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 20px; text-align: center; margin-bottom: 24px; }
+    .grade-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; margin-bottom: 4px; }
+    .grade-score { font-size: 38px; font-weight: 800; color: #0f172a; margin: 4px 0; }
+    .grade-letter { display: inline-block; padding: 4px 12px; border-radius: 9999px; font-size: 14px; font-weight: 700; background-color: #dbeafe; color: #1e40af; }
+    .grade-notes { font-size: 11px; color: #64748b; margin-top: 8px; }
+    
+    /* Section Headings */
+    .section-title { font-size: 14px; font-weight: 700; color: #1e293b; text-transform: uppercase; letter-spacing: 0.5px; margin: 24px 0 10px 0; border-bottom: 2px solid #e2e8f0; padding-bottom: 6px; }
+    
+    /* Tables */
+    .data-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 13px; }
+    .data-table th { background-color: #f1f5f9; color: #475569; font-weight: 600; text-align: left; padding: 9px 12px; border-bottom: 1px solid #cbd5e1; }
+    .data-table th.num, .data-table td.num { text-align: right; }
+    .data-table td { padding: 9px 12px; border-bottom: 1px solid #e2e8f0; color: #334155; }
+    .data-table tr:nth-child(even) td { background-color: #fbfcfe; }
+    
+    /* Badges */
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600; }
+    .badge-returned { background-color: #dcfce7; color: #15803d; }
+    .badge-pending { background-color: #fef3c7; color: #b45309; }
+    .badge-viewed { background-color: #fee2e2; color: #b91c1c; }
+    
+    /* Missing Work Alert Box */
+    .alert-box { background-color: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 14px 16px; margin-bottom: 20px; font-size: 12px; color: #92400e; }
+    .alert-box strong { font-weight: 700; color: #78350f; }
+    
+    /* Feedback quote */
+    .feedback-note { font-style: italic; color: #475569; font-size: 12px; background: #f8fafc; padding: 4px 8px; border-radius: 4px; border-left: 3px solid #3b82f6; margin-top: 4px; }
+    
+    /* Footer */
+    .footer { padding: 18px 24px; background-color: #f8fafc; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+      <tr>
+        <td align="center">
+          <div class="card">
+            
+            <!-- Header -->
+            <div class="header">
+              <h1>Student Progress &amp; Grade Report</h1>
+              <p>{{ student.course_name }} &bull; Generated {{ generated_at }}</p>
+            </div>
+
+            <!-- Content -->
+            <div class="content">
+              <p style="font-size: 14px; color: #1e293b; margin: 0 0 16px 0;">
+                Hello <strong>{{ student.first_name }}</strong>, here is your current academic standing in <strong>{{ student.course_name }}</strong>.
+              </p>
+
+              <!-- Overall Grade Card -->
+              <div class="grade-spotlight">
+                <div class="grade-label">Current Overall Grade</div>
+                <div class="grade-score">{{ student.overall_percent }}%</div>
+                <span class="grade-letter">Grade: {{ student.letter_grade }}</span>
+                <div class="grade-notes">
+                  * Note: Missing assignments are excluded from the current grade until graded. Final course grades are calculated across Homework (35%), Exams (35%), Teams Discussion (20%), and Attendance/Participation (10%).
+                </div>
+              </div>
+
+              <!-- Category Breakdown Table -->
+              <div class="section-title">Weighted Category Breakdown</div>
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Category</th>
+                    <th class="num">Weight</th>
+                    <th class="num">Points Earned / Possible</th>
+                    <th class="num">Category Score</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for cat_name, cat in student.categories.items() %}
+                  <tr>
+                    <td><strong>{{ cat_name }}</strong></td>
+                    <td class="num">{{ (cat.weight * 100)|int }}%</td>
+                    <td class="num">
+                      {% if cat.points_possible > 0 %}
+                        {{ cat.points_earned }} / {{ cat.points_possible }}
+                      {% elif cat.points_earned > 0 %}
+                        {{ cat.points_earned }} pts (Extra Credit)
+                      {% else %}
+                        &mdash;
+                      {% endif %}
+                    </td>
+                    <td class="num">
+                      {% if cat.score_percent is not none %}
+                        <strong>{{ cat.score_percent }}%</strong>
+                      {% else %}
+                        <span style="color: #94a3b8; font-style: italic;">Not assessed yet</span>
+                      {% endif %}
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+
+              <!-- Missing / Pending Work -->
+              {% if student.missing_assignments %}
+              <div class="section-title" style="color: #b45309; border-color: #fde68a;">
+                Pending &amp; Missing Assignments ({{ student.missing_assignments|length }})
+              </div>
+              <div class="alert-box">
+                <strong>Attention:</strong> The following items have not yet received a grade. Please submit any past-due work as soon as possible.
+              </div>
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Assignment</th>
+                    <th>Due Date</th>
+                    <th>Category</th>
+                    <th class="num">Max Points</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for item in student.missing_assignments %}
+                  <tr>
+                    <td>{{ item.name }}</td>
+                    <td>{{ item.due_date or 'N/A' }}</td>
+                    <td>{{ item.category }}</td>
+                    <td class="num">{{ item.max_points }}</td>
+                    <td>
+                      {% if item.status == 'Viewed' %}
+                        <span class="badge badge-viewed">Viewed (Not Submitted)</span>
+                      {% elif item.status == 'Not turned in' %}
+                        <span class="badge badge-viewed">Not Turned In</span>
+                      {% else %}
+                        <span class="badge badge-pending">{{ item.status }}</span>
+                      {% endif %}
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+              {% endif %}
+
+              <!-- Graded Assignments -->
+              <div class="section-title">Graded Assignments ({{ student.graded_assignments|length }})</div>
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Assignment</th>
+                    <th>Date</th>
+                    <th>Category</th>
+                    <th class="num">Score</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for item in student.graded_assignments %}
+                  <tr>
+                    <td>
+                      <strong>{{ item.name }}</strong>
+                      {% if item.feedback %}
+                      <div class="feedback-note">Feedback: &ldquo;{{ item.feedback }}&rdquo;</div>
+                      {% endif %}
+                    </td>
+                    <td>{{ item.due_date or 'N/A' }}</td>
+                    <td>{{ item.category }}</td>
+                    <td class="num">
+                      <strong>{{ item.points }}</strong> / {{ item.max_points }}
+                      {% if item.grade %}
+                      <br><small style="color: #64748b;">(Grade: {{ item.grade }})</small>
+                      {% endif %}
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+
+            </div>
+
+            <!-- Footer -->
+            <div class="footer">
+              <p>This automated progress report was generated for <strong>{{ student.full_name }}</strong> ({{ student.email }}).</p>
+              <p>If you have questions about your grade, please reach out to your instructor directly.</p>
+            </div>
+
+          </div>
+        </td>
+      </tr>
+    </table>
+  </div>
+</body>
+</html>

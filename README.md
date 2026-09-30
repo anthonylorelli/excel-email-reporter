@@ -6,11 +6,13 @@ A modular, automated data reporting pipeline that ingests tabular data across a 
 
 ## Features
 
+- **Student Grade & Progress Reporting**: Calculates accurate running weighted grades from Microsoft Teams Assignment workbooks across categories (Homework, Exams, Teams Discussion, Participation).
+- **Missing Work Policy**: Automatically excludes unsubmitted / ungraded assignments until graded, and highlights pending items for students.
+- **Individual Email Drafts**: Generates standard RFC 822 `.eml` drafts with `X-Unsent: 1` that open directly into Outlook / Windows Mail in compose mode, plus companion `.html` previews.
+- **Master Review Dashboard**: Creates an interactive `index.html` review dashboard allowing instructors to inspect class averages, medians, and every student draft.
 - **Batch Spreadsheet Ingestion**: Scans directories for matching Excel workbooks (e.g. `*.xlsx`), ignoring lock/temporary files (`~$*.xlsx`).
 - **Flexible Schema & Column Mapping**: Maps arbitrary Excel headers to standardized internal schema fields.
-- **Data Filtering & Normalization**: Cleans and filters rows (e.g., status filters, date bounds).
-- **Executive KPI Cards**: Calculates custom summary metrics (Totals, Averages, Counts, Min/Max) with customizable formatting.
-- **Grouped Breakdowns**: Generates cross-sectional pivot/summary tables (e.g., performance grouped by region, department, or product).
+- **Executive KPI Cards & Grouped Breakdowns**: Generates cross-sectional pivot tables and performance statistics.
 - **Responsive HTML & Multi-part MIME Email**: Generates email-safe HTML compatible with Outlook, Apple Mail, and Gmail, paired with a plain-text fallback.
 - **Automated Attachments**: Generates and attaches consolidated Excel workbooks or attaches original source files.
 - **Safe Dry-Run Mode**: Preview HTML reports in your browser and inspect email headers before sending live emails.
@@ -111,9 +113,28 @@ This will:
 
 You can double-click or open `output/report_preview_<date>.html` in your browser to inspect the visual output!
 
-### 5. Send Real Email
+### 5. Generate Student Grade Reports & Draft Emails
 
-When you are ready to dispatch the email to configured recipients:
+To process student assignment workbooks (e.g. from Microsoft Teams) and generate individual student progress report drafts:
+
+```powershell
+python -m src --config config/grades_config.yaml
+```
+
+This will:
+1. Ingest class gradebooks from `data/grades/*.xlsx` (or path specified in config).
+2. Weight grades according to configured categories:
+   - **Homework:** 35%
+   - **Exams:** 35%
+   - **Teams Discussion:** 20%
+   - **Attendance/Participation:** 10%
+3. Exclude missing/ungraded assignments from the current running score until graded.
+4. Generate standard `.eml` draft files in `output/drafts/<Course>/<Student_Name>_grade_report.eml` with `X-Unsent: 1`. Double-clicking any `.eml` file opens Outlook / Windows Mail directly in compose mode with the student's email and personalized report ready to review!
+5. Generate companion `.html` previews and a master `output/drafts/index.html` review dashboard for the instructor.
+
+### 6. Send Real Email (General Reporting)
+
+When you are ready to dispatch general aggregated reports to configured recipients:
 
 ```powershell
 python -m src --config config/config.example.yaml --send

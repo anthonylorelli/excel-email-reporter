@@ -158,6 +158,45 @@ class ReportGenerator:
             "text": text_body,
         }
 
+    def render_student_report(
+        self,
+        student: Any,
+        template_html: Optional[str] = None,
+        template_text: Optional[str] = None,
+    ) -> Dict[str, str]:
+        """Renders individualized progress and grade report for a single student."""
+        context = {
+            "student": student,
+            "generated_at": datetime.now().strftime("%B %d, %Y at %I:%M %p"),
+        }
+
+        html_path = template_html or getattr(self.config, "template_html", "templates/student_report.html")
+        text_path = template_text or getattr(self.config, "template_text", "templates/student_report.txt")
+
+        html_body = self._render_template(html_path, context)
+        text_body = self._render_template(text_path, context)
+
+        return {
+            "html": html_body,
+            "text": text_body,
+        }
+
+    def render_drafts_dashboard(
+        self,
+        courses: List[Dict[str, Any]],
+        dashboard_template: Optional[str] = None,
+    ) -> str:
+        """Renders the master teacher drafts dashboard."""
+        total_students = sum(len(c["students"]) for c in courses)
+        context = {
+            "courses": courses,
+            "total_students": total_students,
+            "generated_at": datetime.now().strftime("%B %d, %Y at %I:%M %p"),
+        }
+
+        dash_path = dashboard_template or getattr(self.config, "dashboard_template", "templates/drafts_dashboard.html")
+        return self._render_template(dash_path, context)
+
     def _render_template(self, template_path: str, context: Dict[str, Any]) -> str:
         """Helper to render a template file using Jinja2."""
         path = Path(template_path)

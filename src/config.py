@@ -46,10 +46,16 @@ class Config:
         bcc_env = os.getenv("EMAIL_BCC")
         self.email_bcc = [r.strip() for r in bcc_env.split(",") if r.strip()] if bcc_env else self.email.get("bcc", [])
 
+        self.grade_calculation = config_data.get("grade_calculation", {})
+
         # Subject & templates
+        self.audience = self.email.get("audience", "general")
         self.email_subject = self.email.get("subject", "Excel Automated Report - {date}")
+        self.subject_template = self.email.get("subject_template", "Progress Report: {student_name} - {course_name}")
         self.template_html = self.email.get("template_html", "templates/report_template.html")
         self.template_text = self.email.get("template_text", "templates/report_template.txt")
+        self.dashboard_template = self.email.get("dashboard_template", "templates/drafts_dashboard.html")
+        self.output_drafts_dir = self.email.get("output_drafts_dir", "output/drafts")
         self.attachments = self.email.get("attachments", {})
 
 

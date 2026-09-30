@@ -65,6 +65,41 @@ class EmailSender:
 
         return msg
 
+    def create_draft_eml(
+        self,
+        recipient_email: str,
+        recipient_name: str,
+        subject: str,
+        html_body: str,
+        text_body: str,
+        output_eml_path: Path,
+        attachments: Optional[List[Path]] = None,
+    ) -> Path:
+        """Saves an email draft as an RFC 822 .eml file with X-Unsent: 1 header.
+        
+        Double-clicking this .eml file on Windows will open it in Outlook, Windows Mail,
+        or Thunderbird directly in compose/draft mode ready for review and sending.
+        """
+        output_eml_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        to_header = f'"{recipient_name}" <{recipient_email}>' if recipient_name else recipient_email
+        msg = self.build_message(
+            subject=subject,
+            html_body=html_body,
+            text_body=text_body,
+            recipients=[to_header],
+            attachments=attachments,
+        )
+        
+        # Mark as draft for Outlook / Windows Mail / Thunderbird
+        msg["X-Unsent"] = "1"
+        
+        with open(output_eml_path, "wb") as f:
+            f.write(msg.as_bytes())
+            
+        return output_eml_path
+
+
     def send(
         self,
         subject: str,

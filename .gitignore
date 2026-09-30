@@ -41,6 +41,9 @@ venv.bak/
 ~$*.xlsm
 *.tmp
 
+# Local Data / Student Gradebooks (contains PII)
+data/
+
 # Project Output & Generated Reports
 output/
 preview/
