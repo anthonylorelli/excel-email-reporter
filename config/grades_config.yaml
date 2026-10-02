@@ -20,7 +20,7 @@ grade_calculation:
   # Four categories summing to 100%:
   categories:
     Homework: 0.35
-    Exams: 0.35
+    Essays: 0.35
     Teams Discussion: 0.20
     Attendance/Participation: 0.10
 

@@ -9,7 +9,7 @@ Date:    {{ generated_at }}
 CURRENT OVERALL GRADE: {{ student.overall_percent }}% (Grade: {{ student.letter_grade }})
 ----------------------------------------------------------------------
 * Note: Missing assignments are excluded from the current grade until graded.
-Final course grade includes Homework (35%), Exams (35%), Teams Discussion (20%),
+Final course grade includes Homework (35%), Essays (35%), Teams Discussion (20%),
 and Attendance/Participation (10%).
 
 ----------------------------------------------------------------------

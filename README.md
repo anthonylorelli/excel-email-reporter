@@ -6,7 +6,7 @@ A modular, automated data reporting pipeline that ingests tabular data across a 
 
 ## Features
 
-- **Student Grade & Progress Reporting**: Calculates accurate running weighted grades from Microsoft Teams Assignment workbooks across categories (Homework, Exams, Teams Discussion, Participation).
+- **Student Grade & Progress Reporting**: Calculates accurate running weighted grades from Microsoft Teams Assignment workbooks across categories (Homework, Essays, Teams Discussion, Participation).
 - **Missing Work Policy**: Automatically excludes unsubmitted / ungraded assignments until graded, and highlights pending items for students.
 - **Individual Email Drafts**: Generates standard RFC 822 `.eml` drafts with `X-Unsent: 1` that open directly into Outlook / Windows Mail in compose mode, plus companion `.html` previews.
 - **Master Review Dashboard**: Creates an interactive `index.html` review dashboard allowing instructors to inspect class averages, medians, and every student draft.
@@ -125,7 +125,7 @@ This will:
 1. Ingest class gradebooks from `data/grades/*.xlsx` (or path specified in config).
 2. Weight grades according to configured categories:
    - **Homework:** 35%
-   - **Exams:** 35%
+   - **Essays:** 35%
    - **Teams Discussion:** 20%
    - **Attendance/Participation:** 10%
 3. Exclude missing/ungraded assignments from the current running score until graded.

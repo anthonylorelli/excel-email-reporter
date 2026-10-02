@@ -17,11 +17,11 @@ def test_calculate_letter_grade():
 
 def test_grade_calculator_weighted_categories_and_missing_excluded():
     # User requirements:
-    # 1. Homework: 35%, Exams: 35%, Teams Discussion: 20%, Attendance/Participation: 10%
+    # 1. Homework: 35%, Essays: 35%, Teams Discussion: 20%, Attendance/Participation: 10%
     # 2. Missing work excluded until graded
     weights = {
         "Homework": 0.35,
-        "Exams": 0.35,
+        "Essays": 0.35,
         "Teams Discussion": 0.20,
         "Attendance/Participation": 0.10,
     }
@@ -59,5 +59,40 @@ def test_grade_calculator_weighted_categories_and_missing_excluded():
     expected_pct = round((0.63 / 0.65) * 100.0, 1)
     assert p.overall_percent == expected_pct
     assert p.letter_grade == "A+"
-    assert p.categories["Exams"].points_possible == 0.0
-    assert p.categories["Exams"].score_percent is None  # Not yet assessed
+    assert p.categories["Essays"].points_possible == 0.0
+    assert p.categories["Essays"].score_percent is None  # Not yet assessed
+
+
+def test_grade_calculator_with_graded_essays():
+    weights = {
+        "Homework": 0.35,
+        "Essays": 0.35,
+        "Teams Discussion": 0.20,
+        "Attendance/Participation": 0.10,
+    }
+    calculator = GradeCalculator(weights)
+
+    data = [
+        {"Full Name": "John Smith", "First Name": "John", "Last Name": "Smith", "Email Address": "john@example.com",
+         "Assignments": "Essay 1", "Grading Category": "Essays (35%)", "Points": 90.0, "Max Points": 100.0, "Status": "Returned"},
+        {"Full Name": "John Smith", "First Name": "John", "Last Name": "Smith", "Email Address": "john@example.com",
+         "Assignments": "HW 1", "Grading Category": "Homework (35%)", "Points": 10.0, "Max Points": 10.0, "Status": "Returned"},
+        {"Full Name": "John Smith", "First Name": "John", "Last Name": "Smith", "Email Address": "john@example.com",
+         "Assignments": "Disc 1", "Grading Category": "Teams Discussion (20%)", "Points": 10.0, "Max Points": 10.0, "Status": "Returned"},
+        {"Full Name": "John Smith", "First Name": "John", "Last Name": "Smith", "Email Address": "john@example.com",
+         "Assignments": "Att 1", "Grading Category": "Attendance/Participation (10%)", "Points": 10.0, "Max Points": 10.0, "Status": "Returned"},
+    ]
+
+    df = pd.DataFrame(data)
+    profiles = calculator.process_records(df, course_name="Lit 101")
+    p = profiles[0]
+
+    # All 4 categories active:
+    # Essays: 90% * 0.35 = 31.5%
+    # HW: 100% * 0.35 = 35.0%
+    # Disc: 100% * 0.20 = 20.0%
+    # Att: 100% * 0.10 = 10.0%
+    # Overall = 96.5% -> A+
+    assert p.categories["Essays"].score_percent == 90.0
+    assert p.overall_percent == 96.5
+    assert p.letter_grade == "A+"

@@ -51,7 +51,7 @@ class StudentGradeProfile:
 
 DEFAULT_CATEGORY_WEIGHTS: Dict[str, float] = {
     "Homework": 0.35,
-    "Exams": 0.35,
+    "Essays": 0.35,
     "Teams Discussion": 0.20,
     "Attendance/Participation": 0.10,
 }
@@ -65,8 +65,8 @@ def normalize_category_name(cat_str: Optional[str], weights: Dict[str, float]) -
     cat_lower = str(cat_str).lower().strip()
     
     # Priority matching
-    if "exam" in cat_lower or "essay" in cat_lower or "test" in cat_lower:
-        return "Exams"
+    if "essay" in cat_lower or "exam" in cat_lower or "test" in cat_lower:
+        return "Essays"
     if "homework" in cat_lower or "assignment" in cat_lower:
         return "Homework"
     if "discussion" in cat_lower:
@@ -123,7 +123,7 @@ class GradeCalculator:
         """Processes tabular assignment data into a list of StudentGradeProfile objects.
         
         Rules applied:
-        1. Categorized by: Homework (35%), Exams (35%), Teams Discussion (20%), Attendance/Participation (10%).
+        1. Categorized by: Homework (35%), Essays (35%), Teams Discussion (20%), Attendance/Participation (10%).
         2. Missing/ungraded work (Points is None / NaN) is EXCLUDED until graded.
         3. Overall percent is normalized by the sum of active category weights.
         """
