@@ -34,13 +34,19 @@ excel-email-reporter/
 │   ├── cli.py                     # Command-line interface and orchestrator
 │   ├── config.py                  # YAML and .env configuration manager
 │   ├── excel_extractor.py         # Workbook reader, cleaner, and aggregator
+│   ├── grade_calculator.py        # Weighted category grades & missing work calculator
+│   ├── m365_graph_manager.py      # Windows SSO Token Broker & Microsoft Graph draft manager
+│   ├── outlook_manager.py         # Draft manager (Graph SSO, Classic COM, IMAP)
 │   ├── report_generator.py        # Metric calculator and Jinja2 renderer
-│   └── email_sender.py            # SMTP MIME builder and dispatcher
+│   └── email_sender.py            # SMTP MIME builder and .eml generator
 ├── samples/
 │   ├── generate_sample_data.py    # Generates mock Excel workbooks for testing
 │   └── data/                      # Sample workbooks (generated)
 ├── tests/
 │   ├── test_extractor.py          # Extraction and filtering unit tests
+│   ├── test_grade_calculator.py   # Grade calculation unit tests
+│   ├── test_m365_graph.py         # Microsoft Graph & SSO token broker tests
+│   ├── test_outlook_manager.py    # Outlook integration and fallback tests
 │   └── test_report.py             # Metric calculation and rendering tests
 ├── .env.example                   # SMTP server and credential template
 ├── .gitignore
@@ -131,9 +137,17 @@ python -m src --config config/grades_config.yaml --draft-target eml
 python -m src --config config/grades_config.yaml --draft-target outlook
 # or shortcut: python -m src --config config/grades_config.yaml --outlook
 ```
-- Populates drafts directly into your Outlook **Drafts** folder:
-  - **Classic Outlook:** Creates drafts directly in Outlook via COM automation (`win32com.client`).
-  - **New Outlook / Microsoft 365:** Appends drafts directly to the server Drafts folder via IMAP SSL (using credentials in `.env`), automatically syncing them into your Outlook Drafts folder.
+- Populates drafts directly into your Outlook **Drafts** folder using an intelligent priority hierarchy:
+  1. **Microsoft 365 / New Outlook (Windows SSO Token Broker - Zero Password Needed):**
+     - Authenticates seamlessly using Windows Web Account Manager (WAM) via MSAL.
+     - **No passwords stored in `.env`!** Prompts a native Windows SSO dialog once and caches the OAuth token securely.
+     - Creates drafts directly in your Microsoft 365 mailbox via Microsoft Graph API (`POST /me/messages`), syncing immediately across **New Outlook (`olk.exe`)**, **Classic Outlook**, and **Webmail**.
+  2. **Classic Outlook (COM Automation):**
+     - If running Classic Desktop Outlook (`outlook.exe`), creates drafts locally using `win32com.client`.
+  3. **IMAP Server Sync (Alternative):**
+     - If you configure `IMAP_USERNAME` and `IMAP_PASSWORD` in `.env`, syncs drafts via IMAP SSL to any provider (Exchange, Gmail, etc.).
+  4. **Safe Fallback:**
+     - If offline, unauthenticated, or on an unsupported host, automatically generates RFC 822 `.eml` files on disk so drafts are never lost.
 
 You can also set your default preference in `config/grades_config.yaml`:
 ```yaml

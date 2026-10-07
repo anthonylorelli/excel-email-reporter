@@ -34,6 +34,9 @@ venv.bak/
 .env.*.local
 *.pem
 *.key
+*.bin
+.msal_cache*
+.msal_token_cache*
 
 # Excel lock files & temporary office files
 ~$*.xlsx

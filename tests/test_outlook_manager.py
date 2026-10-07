@@ -65,14 +65,59 @@ def test_outlook_manager_fallback_when_neither_available():
     manager.imap_user = ""
     manager.imap_password = ""
 
-    with patch.object(manager, "is_com_available", return_value=(False, "Class not registered")):
-        result = manager.save_draft_to_outlook(
-            recipient_email="test@test.com",
-            recipient_name="Test",
-            subject="Sub",
-            html_body="body",
-            text_body="body",
-        )
+    with patch.object(manager.graph_manager, "is_available", return_value=False):
+        with patch.object(manager, "is_com_available", return_value=(False, "Class not registered")):
+            result = manager.save_draft_to_outlook(
+                recipient_email="test@test.com",
+                recipient_name="Test",
+                subject="Sub",
+                html_body="body",
+                text_body="body",
+            )
 
-        assert result["success"] is False
-        assert "Classic Outlook COM unavailable" in result["error"]
+            assert result["success"] is False
+            assert "Classic Outlook COM unavailable" in result["error"]
+
+
+def test_outlook_manager_graph_draft_success():
+    config = Config({})
+    manager = OutlookDraftManager(config)
+
+    mock_graph_res = {"success": True, "method": "graph", "message_id": "msg_123", "error": None}
+    with patch.object(manager.graph_manager, "is_available", return_value=True):
+        with patch.object(manager.graph_manager, "create_draft", return_value=mock_graph_res) as mock_draft:
+            result = manager.save_draft_to_outlook(
+                recipient_email="student@school.org",
+                recipient_name="Alice",
+                subject="Progress Report",
+                html_body="<p>Grade</p>",
+                text_body="Grade",
+            )
+
+            assert result["success"] is True
+            assert result["method"] == "graph"
+            assert result["message_id"] == "msg_123"
+            mock_draft.assert_called_once()
+
+
+def test_outlook_manager_graph_fails_falls_back_to_com():
+    config = Config({})
+    manager = OutlookDraftManager(config)
+
+    graph_fail_res = {"success": False, "method": "graph", "error": "SSO cancelled"}
+    with patch.object(manager.graph_manager, "is_available", return_value=True):
+        with patch.object(manager.graph_manager, "create_draft", return_value=graph_fail_res):
+            with patch.object(manager, "is_com_available", return_value=(True, None)):
+                with patch.object(manager, "create_draft_via_com", return_value=True) as mock_com:
+                    result = manager.save_draft_to_outlook(
+                        recipient_email="student@school.org",
+                        recipient_name="Alice",
+                        subject="Progress Report",
+                        html_body="<p>Grade</p>",
+                        text_body="Grade",
+                    )
+
+                    assert result["success"] is True
+                    assert result["method"] == "com"
+                    mock_com.assert_called_once()
+
