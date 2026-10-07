@@ -113,24 +113,33 @@ This will:
 
 You can double-click or open `output/report_preview_<date>.html` in your browser to inspect the visual output!
 
-### 5. Generate Student Grade Reports & Draft Emails
+### 5. Generate Student Grade Reports & Choose Draft Target
 
-To process student assignment workbooks (e.g. from Microsoft Teams) and generate individual student progress report drafts:
+You can choose whether to generate standard `.eml` draft files on disk or populate drafts directly inside Microsoft Outlook:
 
+#### Option A: Save `.eml` draft files on disk (Default)
 ```powershell
-python -m src --config config/grades_config.yaml
+python -m src --config config/grades_config.yaml --draft-target eml
+# or shortcut: python -m src --config config/grades_config.yaml --eml
 ```
+- Creates standard RFC 822 `.eml` draft files in `output/drafts/<Course>/<Student_Name>_grade_report.eml` with `X-Unsent: 1`.
+- Double-clicking any `.eml` file opens it directly in Outlook / Windows Mail in compose mode ready to review!
+- Companion `.html` previews and a master `output/drafts/index.html` review dashboard are generated.
 
-This will:
-1. Ingest class gradebooks from `data/grades/*.xlsx` (or path specified in config).
-2. Weight grades according to configured categories:
-   - **Homework:** 35%
-   - **Essays:** 35%
-   - **Teams Discussion:** 20%
-   - **Attendance/Participation:** 10%
-3. Exclude missing/ungraded assignments from the current running score until graded.
-4. Generate standard `.eml` draft files in `output/drafts/<Course>/<Student_Name>_grade_report.eml` with `X-Unsent: 1`. Double-clicking any `.eml` file opens Outlook / Windows Mail directly in compose mode with the student's email and personalized report ready to review!
-5. Generate companion `.html` previews and a master `output/drafts/index.html` review dashboard for the instructor.
+#### Option B: Populate drafts directly into Outlook
+```powershell
+python -m src --config config/grades_config.yaml --draft-target outlook
+# or shortcut: python -m src --config config/grades_config.yaml --outlook
+```
+- Populates drafts directly into your Outlook **Drafts** folder:
+  - **Classic Outlook:** Creates drafts directly in Outlook via COM automation (`win32com.client`).
+  - **New Outlook / Microsoft 365:** Appends drafts directly to the server Drafts folder via IMAP SSL (using credentials in `.env`), automatically syncing them into your Outlook Drafts folder.
+
+You can also set your default preference in `config/grades_config.yaml`:
+```yaml
+email:
+  draft_target: "outlook"   # or "eml"
+```
 
 ### 6. Send Real Email (General Reporting)
 
@@ -147,6 +156,10 @@ python -m src --config config/config.example.yaml --send
 | Argument | Description | Default |
 |---|---|---|
 | `--config`, `-c` | Path to YAML configuration file | `config/config.yaml` or `config.example.yaml` |
+| `--grades` | Run student grade reporting pipeline | Auto-detected from config |
+| `--draft-target` | Drafts destination: `eml` (save `.eml` files) or `outlook` (save in Outlook Drafts) | `eml` (or from config) |
+| `--outlook` | Shortcut for `--draft-target outlook` | |
+| `--eml` | Shortcut for `--draft-target eml` | |
 | `--files`, `-f` | Specific list of Excel files to process | Scans directory pattern from config |
 | `--dry-run` | Simulate email sending and write HTML preview | `True` (safe by default) |
 | `--send` | Send actual email via SMTP | `False` |

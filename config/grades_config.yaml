@@ -27,6 +27,12 @@ grade_calculation:
 # Individual Student Drafts Configuration
 email:
   audience: "individual_drafts"
+
+  # Draft Destination:
+  # - "eml": Generate RFC 822 .eml draft files on disk in output/drafts/ (default)
+  # - "outlook": Populate drafts directly into Microsoft Outlook Drafts folder (via COM / IMAP sync)
+  draft_target: "eml"
+
   subject_template: "Progress Report: {student_name} - {course_name}"
   template_html: "templates/student_report.html"
   template_text: "templates/student_report.txt"

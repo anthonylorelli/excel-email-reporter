@@ -58,7 +58,7 @@
             <th class="num">Overall %</th>
             <th>Grade</th>
             <th class="num">Missing Work</th>
-            <th class="num">Draft Files</th>
+            <th class="num">Drafts / Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -78,8 +78,13 @@
               {% endif %}
             </td>
             <td class="num">
+              {% if student.in_outlook %}
+                <span class="badge" style="background: #e0e7ff; color: #3730a3; margin-right: 6px;">Outlook Draft</span>
+              {% endif %}
               <a class="btn btn-preview" href="{{ student.html_rel_path }}" target="_blank">View HTML</a>
-              <a class="btn btn-eml" href="{{ student.eml_rel_path }}" download>Open EML Draft</a>
+              {% if student.eml_rel_path %}
+                <a class="btn btn-eml" href="{{ student.eml_rel_path }}" download>Open EML</a>
+              {% endif %}
             </td>
           </tr>
           {% endfor %}
