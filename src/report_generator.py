@@ -200,6 +200,11 @@ class ReportGenerator:
     def _render_template(self, template_path: str, context: Dict[str, Any]) -> str:
         """Helper to render a template file using Jinja2."""
         path = Path(template_path)
+        if not path.exists():
+            pkg_fallback = Path(__file__).resolve().parent.parent / template_path
+            if pkg_fallback.exists():
+                path = pkg_fallback
+
         if path.exists():
             env = Environment(loader=FileSystemLoader(str(path.parent)))
             env.filters["ljust"] = lambda s, width: str(s).ljust(width)

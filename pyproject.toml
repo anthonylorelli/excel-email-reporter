@@ -27,6 +27,10 @@ dev = [
 
 [project.scripts]
 excel-report = "src.cli:main"
+excel-email-reporter = "src.cli:main"
+
+[tool.setuptools]
+packages = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
