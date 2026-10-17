@@ -1,6 +1,7 @@
 """Microsoft 365 Graph Draft Manager: populates draft emails directly into M365 via Graph API and Windows SSO Token Broker."""
 
 import base64
+import json
 import logging
 import mimetypes
 import os
@@ -20,16 +21,21 @@ try:
 except ImportError:
     pymsalruntime = None  # type: ignore
 
-# Microsoft Graph Command Line Tools public client ID (supports WAM & delegated Graph scopes)
+# Microsoft Graph Command Line Tools (First-Party / Pre-authorized Public Client ID for organizational M365)
 DEFAULT_CLIENT_ID = "14d82eec-204b-449e-b7d6-3e00e84b80e4"
 DEFAULT_SCOPES = ["https://graph.microsoft.com/Mail.ReadWrite"]
 DEFAULT_AUTHORITY = "https://login.microsoftonline.com/common"
 
+# New Outlook for Windows pre-authorized WAM client ID (supports personal Microsoft accounts & Outlook.com)
+OUTLOOK_WAM_CLIENT_ID = "5d661950-3475-41cd-a2c3-d671a3162bc1"
+OUTLOOK_WAM_SCOPES = ["https://outlook.office.com/.default"]
+OUTLOOK_OWA_SERVICE_URL = "https://outlook.office.com/owa/service.svc"
+
 
 class M365GraphDraftManager:
-    """Manages Microsoft 365 authentication via Windows SSO Token Broker (WAM)
+    """Manages Microsoft 365 & Outlook.com authentication via Windows SSO Token Broker (WAM)
 
-    and creates draft messages in the user's mailbox via Microsoft Graph API.
+    and creates draft messages in the user's mailbox via Microsoft Graph API or Outlook OWA service.
     """
 
     def __init__(self, config: Optional[Any] = None):
@@ -78,6 +84,7 @@ class M365GraphDraftManager:
         self._token_cache: Optional[Any] = None
         self._app: Optional[Any] = None
         self._access_token: Optional[str] = None
+        self._use_owa: bool = False
         self._failed_previously: bool = False
         self._failure_reason: Optional[str] = None
 
@@ -93,25 +100,35 @@ class M365GraphDraftManager:
         """Returns True if Windows native Token Broker (WAM) is supported."""
         return sys.platform == "win32" and pymsalruntime is not None
 
-    def _get_app(self) -> Any:
+    def _get_app(self, enable_broker: Optional[bool] = None) -> Any:
         """Retrieves or instantiates the MSAL PublicClientApplication."""
-        if self._app is None:
+        if self._app is None or enable_broker is not None:
             if msal is None:
                 raise RuntimeError("MSAL library is not installed.")
 
-            self._token_cache = msal.SerializableTokenCache()
-            if self.cache_path.exists():
-                try:
-                    self._token_cache.deserialize(self.cache_path.read_text(encoding="utf-8"))
-                except Exception as ex:
-                    self.logger.warning("Failed to load MSAL token cache: %s", ex)
+            if self._token_cache is None:
+                self._token_cache = msal.SerializableTokenCache()
+                if self.cache_path.exists():
+                    try:
+                        self._token_cache.deserialize(self.cache_path.read_text(encoding="utf-8"))
+                    except Exception as ex:
+                        self.logger.warning("Failed to load MSAL token cache: %s", ex)
 
-            enable_broker = self.is_broker_supported()
+            if enable_broker is None:
+                use_broker_env = os.getenv("M365_USE_BROKER")
+                if use_broker_env is not None:
+                    enable_broker = use_broker_env.lower() in ("true", "1", "yes") and self.is_broker_supported()
+                else:
+                    enable_broker = self.is_broker_supported()
+
+            authority = self.authority
+            if enable_broker is False and self.client_id == DEFAULT_CLIENT_ID and authority.endswith("/common"):
+                authority = "https://login.microsoftonline.com/organizations"
 
             try:
                 self._app = msal.PublicClientApplication(
                     client_id=self.client_id,
-                    authority=self.authority,
+                    authority=authority,
                     token_cache=self._token_cache,
                     enable_broker_on_windows=enable_broker,
                 )
@@ -123,7 +140,7 @@ class M365GraphDraftManager:
                     )
                     self._app = msal.PublicClientApplication(
                         client_id=self.client_id,
-                        authority=self.authority,
+                        authority=authority,
                         token_cache=self._token_cache,
                         enable_broker_on_windows=False,
                     )
@@ -131,6 +148,34 @@ class M365GraphDraftManager:
                     raise
 
         return self._app
+
+    def _acquire_outlook_wam_token(self, prompt: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Acquires a pre-authorized Outlook token via Windows WAM for personal or organizational accounts."""
+        if not self.is_broker_supported() or msal is None:
+            return None
+        try:
+            parent_window = getattr(msal.PublicClientApplication, "CONSOLE_WINDOW_HANDLE", None)
+            outlook_app = msal.PublicClientApplication(
+                client_id=OUTLOOK_WAM_CLIENT_ID,
+                authority="https://login.microsoftonline.com/common",
+                token_cache=self._token_cache,
+                enable_broker_on_windows=True,
+            )
+            accounts = outlook_app.get_accounts()
+            if accounts and prompt == "none":
+                res = outlook_app.acquire_token_silent(OUTLOOK_WAM_SCOPES, account=accounts[0])
+                if res and "access_token" in res:
+                    return res
+            res = outlook_app.acquire_token_interactive(
+                scopes=OUTLOOK_WAM_SCOPES,
+                prompt=prompt,
+                parent_window_handle=parent_window,
+            )
+            if isinstance(res, dict) and "access_token" in res:
+                return res
+        except Exception as ex:
+            self.logger.debug("Outlook WAM token acquisition encountered: %s", ex)
+        return None
 
     def _save_cache(self) -> None:
         """Persists the token cache to disk if changes occurred."""
@@ -142,7 +187,7 @@ class M365GraphDraftManager:
                 self.logger.warning("Failed to persist MSAL token cache: %s", ex)
 
     def acquire_token(self, interactive: bool = True) -> Tuple[Optional[str], Optional[str]]:
-        """Acquires a Microsoft Graph access token silently or via Windows SSO / interactive prompt.
+        """Acquires a Microsoft 365 / Outlook access token silently or via Windows SSO / browser OAuth.
 
         Returns:
             Tuple[Optional[str], Optional[str]]: (access_token, error_message)
@@ -163,17 +208,35 @@ class M365GraphDraftManager:
             self._failure_reason = str(ex)
             return None, str(ex)
 
+        broker_active = getattr(app, "_enable_broker", False) is True
+
         # 1. Attempt silent token acquisition from cache or broker
+        accounts = []
         try:
             accounts = app.get_accounts()
             if accounts:
                 result = app.acquire_token_silent(self.scopes, account=accounts[0])
                 if result and "access_token" in result:
                     self._access_token = result["access_token"]
+                    self._use_owa = self._access_token.startswith("Ew")
                     self._save_cache()
                     return self._access_token, None
         except Exception as ex:
             self.logger.debug("Silent token acquisition encountered: %s", ex)
+
+        # 1b. If using real WAM broker, check silent Windows / New Outlook SSO (supports personal MSA & work accounts)
+        if broker_active:
+            wam_silent = self._acquire_outlook_wam_token(prompt="none")
+            if wam_silent and "access_token" in wam_silent:
+                self._access_token = wam_silent["access_token"]
+                self._use_owa = True
+                self._save_cache()
+                user_display = (
+                    wam_silent.get("id_token_claims", {}).get("preferred_username")
+                    or "Microsoft Account"
+                )
+                print(f"\n  [SSO] Authenticated via Windows Outlook SSO as: {user_display}\n")
+                return self._access_token, None
 
         # If silent acquisition failed and interactive is not permitted, return error
         if not interactive:
@@ -181,10 +244,12 @@ class M365GraphDraftManager:
             self._failure_reason = "No cached account or token found; interactive authentication required."
             return None, self._failure_reason
 
-        # 2. Interactive acquisition via Windows SSO Token Broker (WAM)
+        # 2. Interactive acquisition via Windows SSO Token Broker (WAM), with personal account & browser fallback
+        result = None
+
         try:
-            print("\n  [SSO] Connecting to Microsoft 365 via Windows SSO Token Broker...")
-            print("        A Windows account prompt may appear to confirm sign-in without needing a password.")
+            print("\n  [SSO] Connecting to Microsoft 365...")
+            print("        Please select your Microsoft 365 account in the sign-in prompt.")
 
             parent_window = None
             if self.is_broker_supported() and hasattr(msal.PublicClientApplication, "CONSOLE_WINDOW_HANDLE"):
@@ -196,16 +261,48 @@ class M365GraphDraftManager:
                 parent_window_handle=parent_window,
             )
         except Exception as ex:
-            self._failed_previously = True
-            self._failure_reason = f"Interactive authentication exception: {ex}"
-            return None, self._failure_reason
+            if not broker_active:
+                self._failed_previously = True
+                self._failure_reason = f"Interactive authentication exception: {ex}"
+                return None, self._failure_reason
+            self.logger.debug("WAM broker interactive exception (%s), trying fallbacks.", ex)
+
+        # 3. If WAM broker failed (e.g., Status_ApiContractViolation on personal MSA), try Outlook WAM SSO then browser OAuth
+        if broker_active and (not result or "access_token" not in result):
+            err_code = result.get("error", "") if isinstance(result, dict) else ""
+            err_desc = result.get("error_description", "") if isinstance(result, dict) else ""
+            if err_code == "broker_error" or "ApiContractViolation" in err_desc or result is None:
+                wam_interactive = self._acquire_outlook_wam_token(prompt=None)
+                if wam_interactive and "access_token" in wam_interactive:
+                    self._access_token = wam_interactive["access_token"]
+                    self._use_owa = True
+                    self._save_cache()
+                    user_display = (
+                        wam_interactive.get("id_token_claims", {}).get("preferred_username")
+                        or "Microsoft Account"
+                    )
+                    print(f"  [SSO] Authenticated successfully as: {user_display}\n")
+                    return self._access_token, None
+
+                print("  [SSO] Windows WAM broker unavailable for this account; opening browser sign-in...")
+                try:
+                    browser_app = self._get_app(enable_broker=False)
+                    result = browser_app.acquire_token_interactive(
+                        scopes=self.scopes,
+                        prompt="select_account",
+                    )
+                except Exception as browser_ex:
+                    self._failed_previously = True
+                    self._failure_reason = f"Browser OAuth fallback exception: {browser_ex}"
+                    return None, self._failure_reason
 
         if result and "access_token" in result:
             self._access_token = result["access_token"]
+            self._use_owa = self._access_token.startswith("Ew")
             self._save_cache()
             user_display = (
                 result.get("id_token_claims", {}).get("preferred_username")
-                or (accounts[0].get("username") if accounts else "Windows SSO Account")
+                or (accounts[0].get("username") if accounts else "Microsoft 365 Account")
             )
             print(f"  [SSO] Authenticated successfully as: {user_display}\n")
             return self._access_token, None
@@ -219,6 +316,156 @@ class M365GraphDraftManager:
             self._failure_reason = f"Authentication error: {err_msg}"
             return None, self._failure_reason
 
+    def _create_draft_via_owa(
+        self,
+        token: str,
+        recipient_email: str,
+        recipient_name: str,
+        subject: str,
+        html_body: str,
+        attachments: Optional[List[Path]] = None,
+    ) -> Dict[str, Any]:
+        """Creates a draft message in Outlook.com / Exchange Online via OWA service.svc CreateItem."""
+        item_dict: Dict[str, Any] = {
+            "__type": "Message:#Exchange",
+            "Subject": subject,
+            "Body": {
+                "__type": "BodyContentType:#Exchange",
+                "BodyType": "HTML",
+                "Value": html_body,
+            },
+            "ToRecipients": [
+                {
+                    "__type": "EmailAddressWrapper:#Exchange",
+                    "EmailAddress": recipient_email,
+                    "Name": recipient_name or recipient_email,
+                }
+            ],
+        }
+
+        if getattr(self.config, "email_cc", None):
+            item_dict["CcRecipients"] = [
+                {"__type": "EmailAddressWrapper:#Exchange", "EmailAddress": addr}
+                for addr in self.config.email_cc
+            ]
+        if getattr(self.config, "email_bcc", None):
+            item_dict["BccRecipients"] = [
+                {"__type": "EmailAddressWrapper:#Exchange", "EmailAddress": addr}
+                for addr in self.config.email_bcc
+            ]
+
+        create_payload = {
+            "__type": "CreateItemJsonRequest:#Exchange",
+            "Header": {
+                "__type": "JsonRequestHeaders:#Exchange",
+                "RequestServerVersion": "V2018_01_08",
+            },
+            "Body": {
+                "__type": "CreateItemRequest:#Exchange",
+                "MessageDisposition": "SaveOnly",
+                "Items": [item_dict],
+            },
+        }
+
+        post_str = json.dumps(create_payload)
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json; charset=utf-8",
+            "Action": "CreateItem",
+            "X-OWA-UrlPostData": post_str,
+        }
+
+        try:
+            resp = requests.post(
+                f"{OUTLOOK_OWA_SERVICE_URL}?action=CreateItem&app=Mail",
+                data=post_str.encode("utf-8"),
+                headers=headers,
+                timeout=30,
+            )
+            if resp.status_code != 200:
+                return {
+                    "success": False,
+                    "method": "graph",
+                    "message_id": None,
+                    "error": f"Outlook OWA HTTP {resp.status_code}: {resp.text[:300]}",
+                }
+
+            body = resp.json()
+            resp_items = (
+                body.get("Body", {})
+                .get("ResponseMessages", {})
+                .get("Items", [])
+            )
+            if not resp_items or resp_items[0].get("ResponseClass") != "Success":
+                msg_text = resp_items[0].get("MessageText", "Unknown OWA error") if resp_items else "Empty OWA response"
+                return {
+                    "success": False,
+                    "method": "graph",
+                    "message_id": None,
+                    "error": f"Outlook OWA CreateItem error: {msg_text}",
+                }
+
+            created_items = resp_items[0].get("Items", [])
+            item_id_obj = created_items[0].get("ItemId", {}) if created_items else {}
+            msg_id = item_id_obj.get("Id")
+
+            # Upload attachments if present
+            if attachments and item_id_obj:
+                file_atts = []
+                for att in attachments:
+                    if att.exists():
+                        ctype, _ = mimetypes.guess_type(str(att))
+                        if not ctype:
+                            ctype = "application/octet-stream"
+                        b64_content = base64.b64encode(att.read_bytes()).decode("utf-8")
+                        file_atts.append({
+                            "__type": "FileAttachment:#Exchange",
+                            "Name": att.name,
+                            "ContentType": ctype,
+                            "Content": b64_content,
+                            "IsInline": False,
+                        })
+                if file_atts:
+                    att_payload = {
+                        "__type": "CreateAttachmentJsonRequest:#Exchange",
+                        "Header": {
+                            "__type": "JsonRequestHeaders:#Exchange",
+                            "RequestServerVersion": "V2018_01_08",
+                        },
+                        "Body": {
+                            "__type": "CreateAttachmentRequest:#Exchange",
+                            "ParentItemId": item_id_obj,
+                            "Attachments": file_atts,
+                        },
+                    }
+                    att_str = json.dumps(att_payload)
+                    att_headers = {
+                        "Authorization": f"Bearer {token}",
+                        "Content-Type": "application/json; charset=utf-8",
+                        "Action": "CreateAttachment",
+                        "X-OWA-UrlPostData": att_str,
+                    }
+                    requests.post(
+                        f"{OUTLOOK_OWA_SERVICE_URL}?action=CreateAttachment&app=Mail",
+                        data=att_str.encode("utf-8"),
+                        headers=att_headers,
+                        timeout=30,
+                    )
+
+            return {
+                "success": True,
+                "method": "graph",
+                "message_id": msg_id,
+                "error": None,
+            }
+        except Exception as owa_ex:
+            return {
+                "success": False,
+                "method": "graph",
+                "message_id": None,
+                "error": f"Outlook OWA request error: {owa_ex}",
+            }
+
     def create_draft(
         self,
         recipient_email: str,
@@ -228,7 +475,7 @@ class M365GraphDraftManager:
         text_body: str = "",
         attachments: Optional[List[Path]] = None,
     ) -> Dict[str, Any]:
-        """Creates a draft message in Microsoft 365 via Microsoft Graph API.
+        """Creates a draft message in Microsoft 365 / Outlook.com via Graph API or OWA service.
 
         Returns:
             Dict with keys: success (bool), method ("graph"), message_id (str|None), error (str|None)
@@ -239,8 +486,18 @@ class M365GraphDraftManager:
                 "success": False,
                 "method": "graph",
                 "message_id": None,
-                "error": err or "Failed to obtain Microsoft Graph access token",
+                "error": err or "Failed to obtain Microsoft 365 access token",
             }
+
+        if self._use_owa or token.startswith("Ew"):
+            return self._create_draft_via_owa(
+                token=token,
+                recipient_email=recipient_email,
+                recipient_name=recipient_name,
+                subject=subject,
+                html_body=html_body,
+                attachments=attachments,
+            )
 
         message_payload: Dict[str, Any] = {
             "subject": subject,

@@ -148,3 +148,94 @@ def test_m365_manager_handles_interactive_auth_failure():
         )
         assert draft_res["success"] is False
         assert "User cancelled the sign-in dialog" in draft_res["error"]
+
+
+def test_m365_manager_wam_contract_violation_falls_back_to_browser():
+    config = Config({})
+    manager = M365GraphDraftManager(config)
+
+    mock_broker_app = MagicMock()
+    mock_broker_app._enable_broker = True
+    mock_broker_app.get_accounts.return_value = []
+    mock_broker_app.acquire_token_interactive.return_value = {
+        "error": "broker_error",
+        "error_description": "(pii). Status: Response_Status.Status_ApiContractViolation, Error code: 2156265475, Tag: 557973634",
+    }
+
+    mock_browser_app = MagicMock()
+    mock_browser_app._enable_broker = False
+    mock_browser_app.acquire_token_interactive.return_value = {
+        "access_token": "browser_fallback_token_999",
+        "id_token_claims": {"preferred_username": "teacher@connectionsnw.org"},
+    }
+
+    def get_app_side_effect(enable_broker=None):
+        if enable_broker is False:
+            return mock_browser_app
+        return mock_broker_app
+
+    with patch.object(manager, "_acquire_outlook_wam_token", return_value=None):
+        with patch.object(manager, "_get_app", side_effect=get_app_side_effect):
+            token, err = manager.acquire_token(interactive=True)
+
+            assert token == "browser_fallback_token_999"
+            assert err is None
+            mock_broker_app.acquire_token_interactive.assert_called_once()
+            mock_browser_app.acquire_token_interactive.assert_called_once()
+
+
+def test_m365_manager_personal_account_owa_draft_creation():
+    config = Config({})
+    manager = M365GraphDraftManager(config)
+
+    mock_broker_app = MagicMock()
+    mock_broker_app._enable_broker = True
+    mock_broker_app.get_accounts.return_value = []
+
+    wam_token_res = {
+        "access_token": "EwBIBOl3BAAUcnotHNLX_personal_msa_token",
+        "id_token_claims": {"preferred_username": "student@live.com"},
+    }
+
+    mock_owa_resp = MagicMock()
+    mock_owa_resp.status_code = 200
+    mock_owa_resp.json.return_value = {
+        "Body": {
+            "ResponseMessages": {
+                "Items": [
+                    {
+                        "ResponseClass": "Success",
+                        "ResponseCode": "NoError",
+                        "Items": [
+                            {
+                                "ItemId": {
+                                    "Id": "owa_draft_id_123",
+                                    "ChangeKey": "ck_456",
+                                }
+                            }
+                        ],
+                    }
+                ]
+            }
+        }
+    }
+
+    with patch.object(manager, "_get_app", return_value=mock_broker_app):
+        with patch.object(manager, "_acquire_outlook_wam_token", return_value=wam_token_res):
+            with patch("requests.post", return_value=mock_owa_resp) as mock_post:
+                res = manager.create_draft(
+                    recipient_email="parent@live.com",
+                    recipient_name="Parent",
+                    subject="Progress Report",
+                    html_body="<p>Report content</p>",
+                )
+
+                assert res["success"] is True
+                assert res["message_id"] == "owa_draft_id_123"
+                assert res["method"] == "graph"
+                mock_post.assert_called_once()
+                args, kwargs = mock_post.call_args
+                assert "outlook.office.com/owa/service.svc?action=CreateItem" in args[0]
+                assert kwargs["headers"]["Action"] == "CreateItem"
+
+
