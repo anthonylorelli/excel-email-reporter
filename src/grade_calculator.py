@@ -84,28 +84,30 @@ def normalize_category_name(cat_str: Optional[str], weights: Dict[str, float]) -
 
 def calculate_letter_grade(percent: float) -> str:
     """Converts a percentage grade to standard letter grade."""
-    if percent >= 96.5:
+    if percent >= 97.5:
         return "A+"
     if percent >= 92.5:
         return "A"
     if percent >= 89.5:
         return "A-"
-    if percent >= 86.5:
+    if percent >= 87.5:
         return "B+"
     if percent >= 82.5:
         return "B"
     if percent >= 79.5:
         return "B-"
-    if percent >= 76.5:
+    if percent >= 77.5:
         return "C+"
     if percent >= 72.5:
         return "C"
     if percent >= 69.5:
         return "C-"
-    if percent >= 66.5:
+    if percent >= 67.5:
         return "D+"
-    if percent >= 59.5:
+    if percent >= 62.5:
         return "D"
+    if percent >= 59.5:
+        return "D-"
     return "F"
 
 
