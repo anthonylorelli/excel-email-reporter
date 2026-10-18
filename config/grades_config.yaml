@@ -33,6 +33,12 @@ email:
   # - "outlook": Populate drafts directly into Microsoft Outlook Drafts folder (via COM / IMAP sync)
   draft_target: "eml"
 
+  # Microsoft Account Selection (when draft_target is "outlook"):
+  # - "work": Organizational Microsoft 365 account (default)
+  # - "personal": Personal Microsoft account (@live.com, @outlook.com, @hotmail.com)
+  # - Or specify an exact email address (e.g., "teacher@school.org")
+  m365_account: "work"
+
   subject_template: "Progress Report: {student_name} - {course_name}"
   template_html: "templates/student_report.html"
   template_text: "templates/student_report.txt"

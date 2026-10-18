@@ -319,6 +319,12 @@ def main():
         help="Shortcut for --draft-target eml (save .eml files to disk)",
     )
     parser.add_argument(
+        "--account", "-a",
+        type=str,
+        default=None,
+        help="Microsoft account to use with --outlook: 'work' (default, organizational M365), 'personal' (Outlook.com/Live), or a specific email address (e.g. user@domain.com)",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         default=False,
@@ -384,6 +390,8 @@ def main():
             config_file = "config/config.yaml"
 
     config = load_config(config_file)
+    if args.account:
+        config.m365_account = args.account.strip()
 
     # Route pipeline based on project type or CLI flag
     is_grades = args.grades or config.project.get("type") == "student_grades" or config.audience == "individual_drafts"

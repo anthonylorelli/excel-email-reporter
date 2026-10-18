@@ -24,12 +24,15 @@ except ImportError:
 # Microsoft Graph Command Line Tools (First-Party / Pre-authorized Public Client ID for organizational M365)
 DEFAULT_CLIENT_ID = "14d82eec-204b-449e-b7d6-3e00e84b80e4"
 DEFAULT_SCOPES = ["https://graph.microsoft.com/Mail.ReadWrite"]
-DEFAULT_AUTHORITY = "https://login.microsoftonline.com/common"
+DEFAULT_AUTHORITY = "https://login.microsoftonline.com/organizations"
 
 # New Outlook for Windows pre-authorized WAM client ID (supports personal Microsoft accounts & Outlook.com)
 OUTLOOK_WAM_CLIENT_ID = "5d661950-3475-41cd-a2c3-d671a3162bc1"
 OUTLOOK_WAM_SCOPES = ["https://outlook.office.com/.default"]
 OUTLOOK_OWA_SERVICE_URL = "https://outlook.office.com/owa/service.svc"
+
+MSA_TENANT_ID = "9188040d-6c67-4c5b-b112-36a304b66dad"
+PERSONAL_DOMAINS = ("@live.com", "@outlook.com", "@hotmail.com", "@msn.com", "@passport.com")
 
 
 class M365GraphDraftManager:
@@ -42,14 +45,42 @@ class M365GraphDraftManager:
         self.config = config
         self.logger = logging.getLogger(__name__)
 
+        raw_account = os.getenv(
+            "M365_ACCOUNT",
+            getattr(config, "m365_account", "work") if config else "work",
+        ).strip()
+        self.m365_account = raw_account or "work"
+        self.login_hint: Optional[str] = None
+
+        acct_lower = self.m365_account.lower()
+        if acct_lower in ("personal", "consumers", "consumer", "msa"):
+            self.account_mode = "personal"
+        elif "@" in self.m365_account:
+            self.login_hint = self.m365_account
+            if acct_lower.endswith(PERSONAL_DOMAINS):
+                self.account_mode = "personal"
+            else:
+                self.account_mode = "work"
+        else:
+            self.account_mode = "work"
+
         self.client_id = os.getenv(
             "M365_CLIENT_ID",
             getattr(config, "m365_client_id", DEFAULT_CLIENT_ID) if config else DEFAULT_CLIENT_ID,
         )
-        self.tenant_id = os.getenv(
+
+        default_tenant = "consumers" if self.account_mode == "personal" else "organizations"
+        raw_tenant = os.getenv(
             "M365_TENANT_ID",
-            getattr(config, "m365_tenant_id", "common") if config else "common",
+            getattr(config, "m365_tenant_id", default_tenant) if config else default_tenant,
         )
+        if self.account_mode == "personal":
+            self.tenant_id = "consumers"
+        elif raw_tenant in ("common", "", None):
+            self.tenant_id = "organizations"
+        else:
+            self.tenant_id = raw_tenant
+
         self.authority = os.getenv(
             "M365_AUTHORITY",
             getattr(config, "m365_authority", f"https://login.microsoftonline.com/{self.tenant_id}")
@@ -100,6 +131,35 @@ class M365GraphDraftManager:
         """Returns True if Windows native Token Broker (WAM) is supported."""
         return sys.platform == "win32" and pymsalruntime is not None
 
+    @staticmethod
+    def _is_personal_account_entry(account: Dict[str, Any]) -> bool:
+        """Returns True if an MSAL account dictionary belongs to a personal Microsoft account."""
+        username = (account.get("username") or "").lower()
+        home_id = (account.get("home_account_id") or "").lower()
+        realm = (account.get("realm") or "").lower()
+        if MSA_TENANT_ID in home_id or realm in (MSA_TENANT_ID, "consumers"):
+            return True
+        if username.endswith(PERSONAL_DOMAINS):
+            return True
+        return False
+
+    def _select_cached_account(self, accounts: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        """Selects a cached MSAL account matching the configured account_mode and login_hint."""
+        if not accounts:
+            return None
+        for acc in accounts:
+            uname = (acc.get("username") or "").lower()
+            if self.login_hint and uname != self.login_hint.lower():
+                continue
+            # When home_account_id or domain clearly identifies personal vs work, filter accordingly
+            is_personal = self._is_personal_account_entry(acc)
+            if self.account_mode == "personal" and not is_personal:
+                continue
+            if self.account_mode == "work" and is_personal and not self.login_hint:
+                continue
+            return acc
+        return None
+
     def _get_app(self, enable_broker: Optional[bool] = None) -> Any:
         """Retrieves or instantiates the MSAL PublicClientApplication."""
         if self._app is None or enable_broker is not None:
@@ -149,29 +209,49 @@ class M365GraphDraftManager:
 
         return self._app
 
-    def _acquire_outlook_wam_token(self, prompt: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    def _acquire_outlook_wam_token(
+        self,
+        prompt: Optional[str] = None,
+        authority: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
         """Acquires a pre-authorized Outlook token via Windows WAM for personal or organizational accounts."""
         if not self.is_broker_supported() or msal is None:
             return None
+        target_authority = authority or (
+            "https://login.microsoftonline.com/consumers"
+            if self.account_mode == "personal"
+            else "https://login.microsoftonline.com/organizations"
+        )
         try:
             parent_window = getattr(msal.PublicClientApplication, "CONSOLE_WINDOW_HANDLE", None)
             outlook_app = msal.PublicClientApplication(
                 client_id=OUTLOOK_WAM_CLIENT_ID,
-                authority="https://login.microsoftonline.com/common",
+                authority=target_authority,
                 token_cache=self._token_cache,
                 enable_broker_on_windows=True,
             )
-            accounts = outlook_app.get_accounts()
-            if accounts and prompt == "none":
-                res = outlook_app.acquire_token_silent(OUTLOOK_WAM_SCOPES, account=accounts[0])
+            matched_acc = self._select_cached_account(outlook_app.get_accounts())
+            if matched_acc and prompt == "none":
+                res = outlook_app.acquire_token_silent(OUTLOOK_WAM_SCOPES, account=matched_acc)
                 if res and "access_token" in res:
                     return res
-            res = outlook_app.acquire_token_interactive(
-                scopes=OUTLOOK_WAM_SCOPES,
-                prompt=prompt,
-                parent_window_handle=parent_window,
-            )
+            interactive_kwargs: Dict[str, Any] = {
+                "scopes": OUTLOOK_WAM_SCOPES,
+                "prompt": prompt,
+                "parent_window_handle": parent_window,
+            }
+            if self.login_hint:
+                interactive_kwargs["login_hint"] = self.login_hint
+            res = outlook_app.acquire_token_interactive(**interactive_kwargs)
             if isinstance(res, dict) and "access_token" in res:
+                claims = res.get("id_token_claims") or {}
+                uname = (claims.get("preferred_username") or "").lower()
+                tid = (claims.get("tid") or "").lower()
+                is_personal = tid == MSA_TENANT_ID or uname.endswith(PERSONAL_DOMAINS)
+                if self.account_mode == "work" and is_personal and not self.login_hint:
+                    return None
+                if self.account_mode == "personal" and uname and not is_personal:
+                    return None
                 return res
         except Exception as ex:
             self.logger.debug("Outlook WAM token acquisition encountered: %s", ex)
@@ -210,12 +290,13 @@ class M365GraphDraftManager:
 
         broker_active = getattr(app, "_enable_broker", False) is True
 
-        # 1. Attempt silent token acquisition from cache or broker
-        accounts = []
+        # 1. Attempt silent token acquisition from cache
+        matched_account = None
         try:
             accounts = app.get_accounts()
-            if accounts:
-                result = app.acquire_token_silent(self.scopes, account=accounts[0])
+            matched_account = self._select_cached_account(accounts)
+            if matched_account:
+                result = app.acquire_token_silent(self.scopes, account=matched_account)
                 if result and "access_token" in result:
                     self._access_token = result["access_token"]
                     self._use_owa = self._access_token.startswith("Ew")
@@ -224,7 +305,7 @@ class M365GraphDraftManager:
         except Exception as ex:
             self.logger.debug("Silent token acquisition encountered: %s", ex)
 
-        # 1b. If using real WAM broker, check silent Windows / New Outlook SSO (supports personal MSA & work accounts)
+        # 1b. If using real WAM broker, check silent WAM SSO for the target account mode (work vs personal)
         if broker_active:
             wam_silent = self._acquire_outlook_wam_token(prompt="none")
             if wam_silent and "access_token" in wam_silent:
@@ -244,22 +325,44 @@ class M365GraphDraftManager:
             self._failure_reason = "No cached account or token found; interactive authentication required."
             return None, self._failure_reason
 
-        # 2. Interactive acquisition via Windows SSO Token Broker (WAM), with personal account & browser fallback
+        # 2. Interactive acquisition
         result = None
+        acct_label = "personal Microsoft" if self.account_mode == "personal" else "organizational Microsoft 365"
+        if self.login_hint:
+            acct_label = f"{acct_label} ({self.login_hint})"
+
+        if broker_active and self.account_mode == "personal":
+            print(f"\n  [SSO] Connecting to {acct_label} account...")
+            wam_personal = self._acquire_outlook_wam_token(prompt=None)
+            if wam_personal and "access_token" in wam_personal:
+                self._access_token = wam_personal["access_token"]
+                self._use_owa = True
+                self._save_cache()
+                user_display = (
+                    wam_personal.get("id_token_claims", {}).get("preferred_username")
+                    or self.login_hint
+                    or "Personal Microsoft Account"
+                )
+                print(f"  [SSO] Authenticated successfully as: {user_display}\n")
+                return self._access_token, None
 
         try:
-            print("\n  [SSO] Connecting to Microsoft 365...")
-            print("        Please select your Microsoft 365 account in the sign-in prompt.")
+            print(f"\n  [SSO] Connecting to {acct_label} account...")
+            print("        Please select your account in the sign-in prompt.")
 
             parent_window = None
             if self.is_broker_supported() and hasattr(msal.PublicClientApplication, "CONSOLE_WINDOW_HANDLE"):
                 parent_window = msal.PublicClientApplication.CONSOLE_WINDOW_HANDLE
 
-            result = app.acquire_token_interactive(
-                scopes=self.scopes,
-                prompt="select_account",
-                parent_window_handle=parent_window,
-            )
+            interactive_kwargs: Dict[str, Any] = {
+                "scopes": self.scopes,
+                "prompt": "select_account",
+                "parent_window_handle": parent_window,
+            }
+            if self.login_hint:
+                interactive_kwargs["login_hint"] = self.login_hint
+
+            result = app.acquire_token_interactive(**interactive_kwargs)
         except Exception as ex:
             if not broker_active:
                 self._failed_previously = True
@@ -267,7 +370,7 @@ class M365GraphDraftManager:
                 return None, self._failure_reason
             self.logger.debug("WAM broker interactive exception (%s), trying fallbacks.", ex)
 
-        # 3. If WAM broker failed (e.g., Status_ApiContractViolation on personal MSA), try Outlook WAM SSO then browser OAuth
+        # 3. If WAM broker failed, try Outlook WAM SSO for the target authority, then browser OAuth
         if broker_active and (not result or "access_token" not in result):
             err_code = result.get("error", "") if isinstance(result, dict) else ""
             err_desc = result.get("error_description", "") if isinstance(result, dict) else ""
@@ -279,6 +382,7 @@ class M365GraphDraftManager:
                     self._save_cache()
                     user_display = (
                         wam_interactive.get("id_token_claims", {}).get("preferred_username")
+                        or self.login_hint
                         or "Microsoft Account"
                     )
                     print(f"  [SSO] Authenticated successfully as: {user_display}\n")
@@ -287,10 +391,13 @@ class M365GraphDraftManager:
                 print("  [SSO] Windows WAM broker unavailable for this account; opening browser sign-in...")
                 try:
                     browser_app = self._get_app(enable_broker=False)
-                    result = browser_app.acquire_token_interactive(
-                        scopes=self.scopes,
-                        prompt="select_account",
-                    )
+                    browser_kwargs: Dict[str, Any] = {
+                        "scopes": self.scopes,
+                        "prompt": "select_account",
+                    }
+                    if self.login_hint:
+                        browser_kwargs["login_hint"] = self.login_hint
+                    result = browser_app.acquire_token_interactive(**browser_kwargs)
                 except Exception as browser_ex:
                     self._failed_previously = True
                     self._failure_reason = f"Browser OAuth fallback exception: {browser_ex}"
@@ -302,7 +409,7 @@ class M365GraphDraftManager:
             self._save_cache()
             user_display = (
                 result.get("id_token_claims", {}).get("preferred_username")
-                or (accounts[0].get("username") if accounts else "Microsoft 365 Account")
+                or (matched_account.get("username") if matched_account else "Microsoft 365 Account")
             )
             print(f"  [SSO] Authenticated successfully as: {user_display}\n")
             return self._access_token, None

@@ -13,10 +13,34 @@ def test_m365_manager_init_defaults():
     manager = M365GraphDraftManager(config)
 
     assert manager.client_id == DEFAULT_CLIENT_ID
-    assert manager.tenant_id == "common"
-    assert "https://login.microsoftonline.com/common" in manager.authority
+    assert manager.account_mode == "work"
+    assert manager.tenant_id == "organizations"
+    assert "https://login.microsoftonline.com/organizations" in manager.authority
     assert "https://graph.microsoft.com/Mail.ReadWrite" in manager.scopes
     assert manager.sso_enabled is True
+
+
+def test_m365_manager_account_selection_options():
+    # Personal mode via keyword
+    cfg_personal = Config({"email": {"m365_account": "personal"}})
+    mgr_personal = M365GraphDraftManager(cfg_personal)
+    assert mgr_personal.account_mode == "personal"
+    assert mgr_personal.tenant_id == "consumers"
+    assert "https://login.microsoftonline.com/consumers" in mgr_personal.authority
+
+    # Organizational mode via email address
+    cfg_work_email = Config({"email": {"m365_account": "teacher@connectionsnw.org"}})
+    mgr_work_email = M365GraphDraftManager(cfg_work_email)
+    assert mgr_work_email.account_mode == "work"
+    assert mgr_work_email.login_hint == "teacher@connectionsnw.org"
+    assert mgr_work_email.tenant_id == "organizations"
+
+    # Personal mode via live.com email address
+    cfg_live_email = Config({"email": {"m365_account": "anthony.lorelli@live.com"}})
+    mgr_live_email = M365GraphDraftManager(cfg_live_email)
+    assert mgr_live_email.account_mode == "personal"
+    assert mgr_live_email.login_hint == "anthony.lorelli@live.com"
+    assert mgr_live_email.tenant_id == "consumers"
 
 
 def test_m365_manager_silent_token_acquisition():
@@ -24,10 +48,14 @@ def test_m365_manager_silent_token_acquisition():
     manager = M365GraphDraftManager(config)
 
     mock_app = MagicMock()
-    mock_app.get_accounts.return_value = [{"username": "testuser@live.com"}]
+    # Ensure personal cached account is skipped when in default 'work' mode, and organizational account is selected
+    mock_app.get_accounts.return_value = [
+        {"username": "personal@live.com", "realm": "9188040d-6c67-4c5b-b112-36a304b66dad"},
+        {"username": "teacher@connectionsnw.org", "realm": "org-tenant-guid"},
+    ]
     mock_app.acquire_token_silent.return_value = {
         "access_token": "mock_silent_token_12345",
-        "id_token_claims": {"preferred_username": "testuser@live.com"},
+        "id_token_claims": {"preferred_username": "teacher@connectionsnw.org"},
     }
 
     with patch.object(manager, "_get_app", return_value=mock_app):
@@ -35,7 +63,10 @@ def test_m365_manager_silent_token_acquisition():
 
         assert token == "mock_silent_token_12345"
         assert err is None
-        mock_app.acquire_token_silent.assert_called_once()
+        mock_app.acquire_token_silent.assert_called_once_with(
+            manager.scopes,
+            account={"username": "teacher@connectionsnw.org", "realm": "org-tenant-guid"},
+        )
 
 
 def test_m365_manager_interactive_token_acquisition():
