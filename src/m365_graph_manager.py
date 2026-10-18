@@ -21,12 +21,11 @@ try:
 except ImportError:
     pymsalruntime = None  # type: ignore
 
-# Microsoft Graph Command Line Tools (First-Party / Pre-authorized Public Client ID for organizational M365)
-DEFAULT_CLIENT_ID = "14d82eec-204b-449e-b7d6-3e00e84b80e4"
+# New Outlook for Windows pre-installed first-party client ID (provisioned in all M365 organizational tenants & personal MSA)
+DEFAULT_CLIENT_ID = "5d661950-3475-41cd-a2c3-d671a3162bc1"
 DEFAULT_SCOPES = ["https://graph.microsoft.com/Mail.ReadWrite"]
 DEFAULT_AUTHORITY = "https://login.microsoftonline.com/organizations"
 
-# New Outlook for Windows pre-authorized WAM client ID (supports personal Microsoft accounts & Outlook.com)
 OUTLOOK_WAM_CLIENT_ID = "5d661950-3475-41cd-a2c3-d671a3162bc1"
 OUTLOOK_WAM_SCOPES = ["https://outlook.office.com/.default"]
 OUTLOOK_OWA_SERVICE_URL = "https://outlook.office.com/owa/service.svc"
@@ -331,17 +330,18 @@ class M365GraphDraftManager:
         if self.login_hint:
             acct_label = f"{acct_label} ({self.login_hint})"
 
-        if broker_active and self.account_mode == "personal":
+        if broker_active:
             print(f"\n  [SSO] Connecting to {acct_label} account...")
-            wam_personal = self._acquire_outlook_wam_token(prompt=None)
-            if wam_personal and "access_token" in wam_personal:
-                self._access_token = wam_personal["access_token"]
+            wam_prompt = None if self.account_mode == "personal" else "select_account"
+            wam_res = self._acquire_outlook_wam_token(prompt=wam_prompt)
+            if wam_res and "access_token" in wam_res:
+                self._access_token = wam_res["access_token"]
                 self._use_owa = True
                 self._save_cache()
                 user_display = (
-                    wam_personal.get("id_token_claims", {}).get("preferred_username")
+                    wam_res.get("id_token_claims", {}).get("preferred_username")
                     or self.login_hint
-                    or "Personal Microsoft Account"
+                    or "Microsoft Account"
                 )
                 print(f"  [SSO] Authenticated successfully as: {user_display}\n")
                 return self._access_token, None
