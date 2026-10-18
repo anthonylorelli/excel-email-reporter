@@ -1,0 +1,42 @@
+======================================================================
+STUDENT PROGRESS & GRADE REPORT
+{{ student.course_name }}
+======================================================================
+Student: {{ student.full_name }} ({{ student.email }})
+Date:    {{ generated_at }}
+
+----------------------------------------------------------------------
+CURRENT OVERALL GRADE: {{ student.overall_percent }}% (Grade: {{ student.letter_grade }})
+----------------------------------------------------------------------
+* Note: Missing assignments are excluded from the current grade until graded.
+Final course grade includes Homework (35%), Essays (35%), Teams Discussion (20%),
+and Attendance/Participation (10%).
+
+----------------------------------------------------------------------
+WEIGHTED CATEGORY BREAKDOWN
+----------------------------------------------------------------------
+{% for cat_name, cat in student.categories.items() %}
+* {{ cat_name }} (Weight: {{ (cat.weight * 100)|int }}%):
+  Score: {% if cat.score_percent is not none %}{{ cat.score_percent }}%{% else %}Not assessed yet{% endif %}
+  Points: {{ cat.points_earned }} / {{ cat.points_possible }} ({{ cat.graded_count }} graded)
+{% endfor %}
+
+{% if student.missing_assignments %}
+----------------------------------------------------------------------
+PENDING & MISSING ASSIGNMENTS ({{ student.missing_assignments|length }})
+----------------------------------------------------------------------
+{% for item in student.missing_assignments %}
+- {{ item.name }} | Due: {{ item.due_date or 'N/A' }} | Status: {{ item.status }} | Max: {{ item.max_points }} pts
+{% endfor %}
+{% endif %}
+
+----------------------------------------------------------------------
+GRADED ASSIGNMENTS ({{ student.graded_assignments|length }})
+----------------------------------------------------------------------
+{% for item in student.graded_assignments %}
+- {{ item.name }} | Category: {{ item.category }} | Score: {{ item.points }}/{{ item.max_points }}{% if item.feedback %} (Feedback: "{{ item.feedback }}"){% endif %}
+{% endfor %}
+
+======================================================================
+Report generated automatically. Contact your instructor with questions.
+======================================================================

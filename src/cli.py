@@ -2,13 +2,14 @@
 
 import argparse
 import re
+import shutil
 import statistics
 import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from src.config import load_config
+from src.config import get_bundled_defaults_dir, load_config, resolve_resource_path
 from src.excel_extractor import ExcelExtractor
 from src.report_generator import ReportGenerator
 from src.email_sender import EmailSender
@@ -340,8 +341,33 @@ def main():
         action="store_true",
         help="Generate sample Excel spreadsheets for demonstration and testing",
     )
+    parser.add_argument(
+        "--init",
+        action="store_true",
+        help="Initialize local config/, templates/, data/grades/, and output/drafts/ folders in the current directory",
+    )
 
     args = parser.parse_args()
+
+    if args.init:
+        defaults_dir = get_bundled_defaults_dir()
+        for subdir in ["config", "templates"]:
+            src_dir = defaults_dir / subdir
+            dst_dir = Path(subdir)
+            dst_dir.mkdir(parents=True, exist_ok=True)
+            if src_dir.exists():
+                for item in src_dir.iterdir():
+                    target = dst_dir / item.name
+                    if not target.exists():
+                        shutil.copy2(item, target)
+                        print(f"  [+] Created {target}")
+                    else:
+                        print(f"  [=] Skipped {target} (already exists)")
+        for folder in [Path("data/grades"), Path("output/drafts")]:
+            folder.mkdir(parents=True, exist_ok=True)
+            print(f"  [+] Ensured directory {folder}/")
+        print(f"\nWorkspace initialized in: {Path.cwd()}")
+        return 0
 
     if args.generate_samples:
         from samples.generate_sample_data import generate_all_samples
@@ -352,7 +378,7 @@ def main():
     # Determine config to load
     config_file = args.config
     if config_file is None:
-        if args.grades or Path("config/grades_config.yaml").exists():
+        if args.grades or (not Path("config/config.yaml").exists() and resolve_resource_path("config/grades_config.yaml") is not None):
             config_file = "config/grades_config.yaml"
         else:
             config_file = "config/config.yaml"

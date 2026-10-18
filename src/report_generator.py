@@ -204,6 +204,10 @@ class ReportGenerator:
             pkg_fallback = Path(__file__).resolve().parent.parent / template_path
             if pkg_fallback.exists():
                 path = pkg_fallback
+            else:
+                bundled_fallback = Path(__file__).resolve().parent / "defaults" / template_path
+                if bundled_fallback.exists():
+                    path = bundled_fallback
 
         if path.exists():
             env = Environment(loader=FileSystemLoader(str(path.parent)))

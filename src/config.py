@@ -66,6 +66,28 @@ class Config:
         self.attachments = self.email.get("attachments", {})
 
 
+def get_bundled_defaults_dir() -> Path:
+    """Returns the path to the bundled defaults directory inside the package."""
+    return Path(__file__).resolve().parent / "defaults"
+
+
+def resolve_resource_path(relative_path: str) -> Optional[Path]:
+    """Resolves a config or template path from CWD, repo root, or bundled package defaults."""
+    p = Path(relative_path)
+    if p.exists():
+        return p
+
+    repo_fallback = Path(__file__).resolve().parent.parent / relative_path
+    if repo_fallback.exists():
+        return repo_fallback
+
+    bundled_fallback = get_bundled_defaults_dir() / relative_path
+    if bundled_fallback.exists():
+        return bundled_fallback
+
+    return None
+
+
 def load_config(config_path: Optional[str] = None, env_path: Optional[str] = None) -> Config:
     """Load configuration from YAML file and .env file.
     
@@ -86,14 +108,17 @@ def load_config(config_path: Optional[str] = None, env_path: Optional[str] = Non
         config_path,
         "config/config.yaml",
         "config/config.yml",
+        "config/grades_config.yaml",
         "config/config.example.yaml",
     ]
 
-    selected_path = None
+    selected_path: Optional[Path] = None
     for cand in candidates:
-        if cand and Path(cand).exists():
-            selected_path = cand
-            break
+        if cand:
+            resolved = resolve_resource_path(cand)
+            if resolved is not None:
+                selected_path = resolved
+                break
 
     data: Dict[str, Any] = {}
     if selected_path:

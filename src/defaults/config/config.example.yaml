@@ -1,0 +1,89 @@
+# excel-email-reporter configuration
+
+project:
+  name: "Regional Sales & Operations Report"
+  description: "Weekly automated summary extracted from regional Excel workbooks"
+
+# Input Excel sources
+data_sources:
+  # Option 1: Directory scan with file pattern
+  directory: "samples/data"
+  file_pattern: "*.xlsx"
+  
+  # Option 2: Specific list of files (overrides directory pattern if provided)
+  # files:
+  #   - "samples/data/Q1_North_Region.xlsx"
+  #   - "samples/data/Q1_South_Region.xlsx"
+
+  # Excel sheet configuration
+  sheet_name: "Sales_Data" # Or 0 for first sheet
+  header_row: 1             # 1-indexed header row
+
+  # Column configuration: map internal field names to expected Excel headers
+  columns:
+    date: "Date"
+    region: "Region"
+    representative: "Sales Rep"
+    category: "Product Category"
+    units: "Units Sold"
+    revenue: "Revenue"
+    status: "Status"
+
+  # Optional filters to apply on data
+  filters:
+    status: ["Completed", "Shipped", "Delivered"] # Include only these statuses
+
+# Aggregations & Metrics to calculate for the summary cards
+summary_metrics:
+  - id: "total_revenue"
+    label: "Total Revenue"
+    type: "sum"
+    column: "revenue"
+    format: "${:,.2f}"
+
+  - id: "total_units"
+    label: "Total Units Sold"
+    type: "sum"
+    column: "units"
+    format: "{:,}"
+
+  - id: "avg_deal_size"
+    label: "Average Order Value"
+    type: "mean"
+    column: "revenue"
+    format: "${:,.2f}"
+
+  - id: "total_transactions"
+    label: "Transactions"
+    type: "count"
+    column: "revenue"
+    format: "{:,}"
+
+# Grouped breakdown table
+breakdown:
+  group_by: "region"
+  metrics:
+    - column: "units"
+      agg: "sum"
+      header: "Units Sold"
+      format: "{:,}"
+    - column: "revenue"
+      agg: "sum"
+      header: "Total Revenue"
+      format: "${:,.2f}"
+    - column: "revenue"
+      agg: "mean"
+      header: "Avg Order Value"
+      format: "${:,.2f}"
+
+# Email dispatch configuration
+email:
+  subject: "[Automated] Regional Performance Report - {date}"
+  template_html: "templates/report_template.html"
+  template_text: "templates/report_template.txt"
+  
+  # Attachment settings
+  attachments:
+    attach_consolidated_excel: true
+    consolidated_filename: "Consolidated_Report_{date}.xlsx"
+    attach_source_files: false

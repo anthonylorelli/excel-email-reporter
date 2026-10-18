@@ -32,6 +32,12 @@ excel-email-reporter = "src.cli:main"
 [tool.setuptools]
 packages = ["src"]
 
+[tool.setuptools.package-data]
+src = [
+    "defaults/config/*.yaml",
+    "defaults/templates/*",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]

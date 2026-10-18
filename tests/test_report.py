@@ -51,3 +51,18 @@ def test_metrics_and_html_generation():
     assert "North" in rendered["html"]
     assert "South" in rendered["html"]
     assert "Test Title" in rendered["text"]
+
+
+def test_bundled_defaults_exist():
+    from src.config import get_bundled_defaults_dir, load_config
+
+    defaults_dir = get_bundled_defaults_dir()
+    assert (defaults_dir / "config" / "grades_config.yaml").exists()
+    assert (defaults_dir / "config" / "config.example.yaml").exists()
+    assert (defaults_dir / "templates" / "student_report.html").exists()
+    assert (defaults_dir / "templates" / "student_report.txt").exists()
+    assert (defaults_dir / "templates" / "drafts_dashboard.html").exists()
+
+    cfg = load_config(str(defaults_dir / "config" / "grades_config.yaml"))
+    assert cfg.project.get("type") == "student_grades"
+
