@@ -57,7 +57,7 @@ class Config:
         self.draft_target = os.getenv("DRAFT_TARGET", self.email.get("draft_target", "eml")).lower()
         self.outlook_method = os.getenv("OUTLOOK_METHOD", self.email.get("outlook_method", "auto")).lower()
         self.m365_account = os.getenv("M365_ACCOUNT", self.email.get("m365_account", "work")).strip()
-        self.m365_client_id = os.getenv("M365_CLIENT_ID", self.email.get("m365_client_id", "5d661950-3475-41cd-a2c3-d671a3162bc1"))
+        self.m365_client_id = os.getenv("M365_CLIENT_ID", self.email.get("m365_client_id", "d3590ed6-52b3-4102-aeff-aad2292ab01c"))
         self.m365_tenant_id = os.getenv("M365_TENANT_ID", self.email.get("m365_tenant_id", "organizations"))
         self.m365_sso = os.getenv("M365_SSO", str(self.email.get("m365_sso", True))).lower() in ("true", "1", "yes")
         self.imap_host = os.getenv("IMAP_HOST", self.email.get("imap_host", "outlook.office365.com"))

@@ -21,11 +21,14 @@ try:
 except ImportError:
     pymsalruntime = None  # type: ignore
 
-# New Outlook for Windows pre-installed first-party client ID (provisioned in all M365 organizational tenants & personal MSA)
-DEFAULT_CLIENT_ID = "5d661950-3475-41cd-a2c3-d671a3162bc1"
+# Microsoft Office first-party FOCI client ID (provisioned in all M365 organizational tenants and pre-authorized for Graph Mail.ReadWrite via WAM)
+DEFAULT_CLIENT_ID = "d3590ed6-52b3-4102-aeff-aad2292ab01c"
+# Microsoft Power Query for Excel first-party client ID (pre-authorized for Graph Mail.ReadWrite with http://localhost redirect URI for browser fallback)
+BROWSER_FALLBACK_CLIENT_ID = "a672d62c-fc7b-4e81-a576-e60dc46e951d"
 DEFAULT_SCOPES = ["https://graph.microsoft.com/Mail.ReadWrite"]
 DEFAULT_AUTHORITY = "https://login.microsoftonline.com/organizations"
 
+# New Outlook for Windows pre-authorized WAM client ID (supports personal Microsoft accounts & Outlook.com)
 OUTLOOK_WAM_CLIENT_ID = "5d661950-3475-41cd-a2c3-d671a3162bc1"
 OUTLOOK_WAM_SCOPES = ["https://outlook.office.com/.default"]
 OUTLOOK_OWA_SERVICE_URL = "https://outlook.office.com/owa/service.svc"
@@ -181,12 +184,15 @@ class M365GraphDraftManager:
                     enable_broker = self.is_broker_supported()
 
             authority = self.authority
-            if enable_broker is False and self.client_id == DEFAULT_CLIENT_ID and authority.endswith("/common"):
-                authority = "https://login.microsoftonline.com/organizations"
+            client_id = self.client_id
+            if enable_broker is False and client_id == DEFAULT_CLIENT_ID:
+                client_id = BROWSER_FALLBACK_CLIENT_ID
+                if authority.endswith("/common"):
+                    authority = "https://login.microsoftonline.com/organizations"
 
             try:
                 self._app = msal.PublicClientApplication(
-                    client_id=self.client_id,
+                    client_id=client_id,
                     authority=authority,
                     token_cache=self._token_cache,
                     enable_broker_on_windows=enable_broker,
@@ -197,8 +203,9 @@ class M365GraphDraftManager:
                         "Failed to initialize MSAL with WAM broker, falling back to standard client: %s",
                         ex,
                     )
+                    fallback_id = BROWSER_FALLBACK_CLIENT_ID if self.client_id == DEFAULT_CLIENT_ID else self.client_id
                     self._app = msal.PublicClientApplication(
-                        client_id=self.client_id,
+                        client_id=fallback_id,
                         authority=authority,
                         token_cache=self._token_cache,
                         enable_broker_on_windows=False,
@@ -213,7 +220,7 @@ class M365GraphDraftManager:
         prompt: Optional[str] = None,
         authority: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
-        """Acquires a pre-authorized Outlook token via Windows WAM for personal or organizational accounts."""
+        """Acquires a pre-authorized Outlook token via Windows WAM for personal Microsoft accounts."""
         if not self.is_broker_supported() or msal is None:
             return None
         target_authority = authority or (
@@ -304,8 +311,8 @@ class M365GraphDraftManager:
         except Exception as ex:
             self.logger.debug("Silent token acquisition encountered: %s", ex)
 
-        # 1b. If using real WAM broker, check silent WAM SSO for the target account mode (work vs personal)
-        if broker_active:
+        # 1b. If using real WAM broker in personal mode, check silent WAM SSO
+        if broker_active and self.account_mode == "personal":
             wam_silent = self._acquire_outlook_wam_token(prompt="none")
             if wam_silent and "access_token" in wam_silent:
                 self._access_token = wam_silent["access_token"]
@@ -330,10 +337,9 @@ class M365GraphDraftManager:
         if self.login_hint:
             acct_label = f"{acct_label} ({self.login_hint})"
 
-        if broker_active:
+        if broker_active and self.account_mode == "personal":
             print(f"\n  [SSO] Connecting to {acct_label} account...")
-            wam_prompt = None if self.account_mode == "personal" else "select_account"
-            wam_res = self._acquire_outlook_wam_token(prompt=wam_prompt)
+            wam_res = self._acquire_outlook_wam_token(prompt=None)
             if wam_res and "access_token" in wam_res:
                 self._access_token = wam_res["access_token"]
                 self._use_owa = True
@@ -341,7 +347,7 @@ class M365GraphDraftManager:
                 user_display = (
                     wam_res.get("id_token_claims", {}).get("preferred_username")
                     or self.login_hint
-                    or "Microsoft Account"
+                    or "Personal Microsoft Account"
                 )
                 print(f"  [SSO] Authenticated successfully as: {user_display}\n")
                 return self._access_token, None
@@ -370,23 +376,24 @@ class M365GraphDraftManager:
                 return None, self._failure_reason
             self.logger.debug("WAM broker interactive exception (%s), trying fallbacks.", ex)
 
-        # 3. If WAM broker failed, try Outlook WAM SSO for the target authority, then browser OAuth
+        # 3. If WAM broker failed, fall back to browser OAuth (using pre-authorized localhost client ID)
         if broker_active and (not result or "access_token" not in result):
             err_code = result.get("error", "") if isinstance(result, dict) else ""
             err_desc = result.get("error_description", "") if isinstance(result, dict) else ""
             if err_code == "broker_error" or "ApiContractViolation" in err_desc or result is None:
-                wam_interactive = self._acquire_outlook_wam_token(prompt=None)
-                if wam_interactive and "access_token" in wam_interactive:
-                    self._access_token = wam_interactive["access_token"]
-                    self._use_owa = True
-                    self._save_cache()
-                    user_display = (
-                        wam_interactive.get("id_token_claims", {}).get("preferred_username")
-                        or self.login_hint
-                        or "Microsoft Account"
-                    )
-                    print(f"  [SSO] Authenticated successfully as: {user_display}\n")
-                    return self._access_token, None
+                if self.account_mode == "personal":
+                    wam_interactive = self._acquire_outlook_wam_token(prompt=None)
+                    if wam_interactive and "access_token" in wam_interactive:
+                        self._access_token = wam_interactive["access_token"]
+                        self._use_owa = True
+                        self._save_cache()
+                        user_display = (
+                            wam_interactive.get("id_token_claims", {}).get("preferred_username")
+                            or self.login_hint
+                            or "Personal Microsoft Account"
+                        )
+                        print(f"  [SSO] Authenticated successfully as: {user_display}\n")
+                        return self._access_token, None
 
                 print("  [SSO] Windows WAM broker unavailable for this account; opening browser sign-in...")
                 try:

@@ -216,7 +216,7 @@ def test_m365_manager_wam_contract_violation_falls_back_to_browser():
 
 
 def test_m365_manager_personal_account_owa_draft_creation():
-    config = Config({})
+    config = Config({"email": {"m365_account": "personal"}})
     manager = M365GraphDraftManager(config)
 
     mock_broker_app = MagicMock()
@@ -268,5 +268,6 @@ def test_m365_manager_personal_account_owa_draft_creation():
                 args, kwargs = mock_post.call_args
                 assert "outlook.office.com/owa/service.svc?action=CreateItem" in args[0]
                 assert kwargs["headers"]["Action"] == "CreateItem"
+
 
 
