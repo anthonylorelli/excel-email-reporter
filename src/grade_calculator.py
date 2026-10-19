@@ -226,12 +226,17 @@ class GradeCalculator:
                 is_graded = False
                 earned_pts: Optional[float] = None
 
-                if pd.notna(raw_pts):
+                if pd.notna(raw_pts) and str(raw_pts).strip() != "" and str(raw_pts).strip().lower() != "nan":
                     try:
                         earned_pts = float(raw_pts)
                         is_graded = True
                     except (ValueError, TypeError):
                         is_graded = False
+
+                # If status is "Returned" and Points value is empty or null, count it as zero points
+                if not is_graded and status.strip().lower() == "returned":
+                    earned_pts = 0.0
+                    is_graded = True
 
                 is_missing = not is_graded and (status in ["Viewed", "Not turned in"] or "turned in" in status.lower())
 

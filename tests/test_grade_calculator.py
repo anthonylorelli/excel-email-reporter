@@ -116,3 +116,52 @@ def test_grade_calculator_with_graded_essays():
     assert p.categories["Essays"].score_percent == 90.0
     assert p.overall_percent == 96.5
     assert p.letter_grade == "A"
+
+
+def test_grade_calculator_returned_status_empty_points_counts_as_zero():
+    weights = {"Homework": 1.0}
+    calculator = GradeCalculator(weights)
+
+    data = [
+        # Graded returned assignment with points
+        {"Full Name": "Test Student", "First Name": "Test", "Last Name": "Student", "Email Address": "test@example.com",
+         "Assignments": "HW 1", "Grading Category": "Homework", "Points": 10.0, "Max Points": 10.0, "Status": "Returned"},
+        # Returned assignment with None/null points -> MUST count as 0 points
+        {"Full Name": "Test Student", "First Name": "Test", "Last Name": "Student", "Email Address": "test@example.com",
+         "Assignments": "HW 2", "Grading Category": "Homework", "Points": None, "Max Points": 10.0, "Status": "Returned"},
+        # Returned assignment with empty string points -> MUST count as 0 points
+        {"Full Name": "Test Student", "First Name": "Test", "Last Name": "Student", "Email Address": "test@example.com",
+         "Assignments": "HW 3", "Grading Category": "Homework", "Points": "", "Max Points": 10.0, "Status": "Returned"},
+        # Viewed assignment with None points -> MUST be excluded as missing work
+        {"Full Name": "Test Student", "First Name": "Test", "Last Name": "Student", "Email Address": "test@example.com",
+         "Assignments": "HW 4", "Grading Category": "Homework", "Points": None, "Max Points": 10.0, "Status": "Viewed"},
+    ]
+
+    df = pd.DataFrame(data)
+    profiles = calculator.process_records(df, course_name="Math 101")
+    p = profiles[0]
+
+    # Graded: HW 1 (10/10), HW 2 (0/10), HW 3 (0/10) -> total earned = 10.0, possible = 30.0 -> 33.3%
+    # Missing: HW 4
+    assert p.total_graded == 3
+    assert p.total_missing == 1
+    assert p.categories["Homework"].points_earned == 10.0
+    assert p.categories["Homework"].points_possible == 30.0
+    assert p.overall_percent == 33.3
+    assert p.letter_grade == "F"
+
+    # Verify individual records
+    hw2 = next(r for r in p.graded_assignments if r.name == "HW 2")
+    assert hw2.points == 0.0
+    assert hw2.is_graded is True
+    assert hw2.is_missing is False
+
+    hw3 = next(r for r in p.graded_assignments if r.name == "HW 3")
+    assert hw3.points == 0.0
+    assert hw3.is_graded is True
+
+    hw4 = next(r for r in p.missing_assignments if r.name == "HW 4")
+    assert hw4.points is None
+    assert hw4.is_graded is False
+    assert hw4.is_missing is True
+
