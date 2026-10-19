@@ -19,6 +19,7 @@ class AssignmentRecord:
     feedback: Optional[str]
     is_graded: bool
     is_missing: bool
+    due_date_obj: Optional[datetime] = None
 
 
 @dataclass
@@ -203,13 +204,21 @@ class GradeCalculator:
                 feedback = str(row.get(feedback_col, "")) if feedback_col in row and pd.notna(row[feedback_col]) else ""
                 grade_str = str(row.get(grade_col, "")) if grade_col in row and pd.notna(row[grade_col]) else ""
 
-                # Format due date string
+                # Format due date string and parse datetime object
                 due_raw = row.get(due_col) if due_col in row else None
                 due_str = ""
+                due_dt: Optional[datetime] = None
                 if pd.notna(due_raw):
-                    if isinstance(due_raw, (pd.Timestamp, datetime)):
-                        due_str = due_raw.strftime("%b %d, %Y")
-                    else:
+                    try:
+                        ts = pd.to_datetime(due_raw, errors="coerce")
+                        if pd.notna(ts):
+                            due_dt = ts.to_pydatetime()
+                            if due_dt.tzinfo is not None:
+                                due_dt = due_dt.replace(tzinfo=None)
+                            due_str = due_dt.strftime("%b %d, %Y")
+                        else:
+                            due_str = str(due_raw).split(" ")[0]
+                    except Exception:
                         due_str = str(due_raw).split(" ")[0]
 
                 # Points handling
@@ -252,6 +261,7 @@ class GradeCalculator:
                     feedback=feedback,
                     is_graded=is_graded,
                     is_missing=is_missing,
+                    due_date_obj=due_dt,
                 )
 
                 cat_obj = cat_summaries[cat_canonical]
@@ -289,6 +299,10 @@ class GradeCalculator:
                 overall_pct = 0.0
 
             letter_grade = calculate_letter_grade(overall_pct)
+
+            # Sort assignments deterministically in descending order by Assignment name
+            graded_list.sort(key=lambda r: str(r.name).lower().strip(), reverse=True)
+            missing_list.sort(key=lambda r: str(r.name).lower().strip(), reverse=True)
 
             profiles.append(
                 StudentGradeProfile(

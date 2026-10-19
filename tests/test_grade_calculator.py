@@ -165,3 +165,32 @@ def test_grade_calculator_returned_status_empty_points_counts_as_zero():
     assert hw4.is_graded is False
     assert hw4.is_missing is True
 
+
+def test_grade_calculator_graded_assignments_sorted_descending_by_name():
+    weights = {"Homework": 1.0}
+    calculator = GradeCalculator(weights)
+
+    data = [
+        {"Full Name": "Test Student", "First Name": "Test", "Last Name": "Student", "Email Address": "test@example.com",
+         "Assignments": "Wk1: Discussion", "Grading Category": "Homework", "Points": 10.0, "Max Points": 10.0, "Status": "Returned"},
+        {"Full Name": "Test Student", "First Name": "Test", "Last Name": "Student", "Email Address": "test@example.com",
+         "Assignments": "Wk5: Bellwork", "Grading Category": "Homework", "Points": 10.0, "Max Points": 10.0, "Status": "Returned"},
+        {"Full Name": "Test Student", "First Name": "Test", "Last Name": "Student", "Email Address": "test@example.com",
+         "Assignments": "Wk6: Reading Log", "Grading Category": "Homework", "Points": 10.0, "Max Points": 10.0, "Status": "Returned"},
+        {"Full Name": "Test Student", "First Name": "Test", "Last Name": "Student", "Email Address": "test@example.com",
+         "Assignments": "Extra Credit: Essay", "Grading Category": "Homework", "Points": 5.0, "Max Points": 0.0, "Status": "Returned"},
+    ]
+
+    df = pd.DataFrame(data)
+    profiles = calculator.process_records(df, course_name="Course 101")
+    p = profiles[0]
+
+    names_in_order = [r.name for r in p.graded_assignments]
+    assert names_in_order == [
+        "Wk6: Reading Log",
+        "Wk5: Bellwork",
+        "Wk1: Discussion",
+        "Extra Credit: Essay",
+    ]
+
+
