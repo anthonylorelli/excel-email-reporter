@@ -352,6 +352,12 @@ def main():
         action="store_true",
         help="Initialize local config/, templates/, data/grades/, and output/drafts/ folders in the current directory",
     )
+    from src import __version__
+    parser.add_argument(
+        "--version", "-V",
+        action="version",
+        version=f"%(prog)s {__version__}",
+    )
 
     args = parser.parse_args()
 
