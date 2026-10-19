@@ -430,6 +430,15 @@ class M365GraphDraftManager:
             self._failure_reason = f"Authentication error: {err_msg}"
             return None, self._failure_reason
 
+    def _merge_cc(self, cc_emails: Optional[List[str]] = None) -> List[str]:
+        """Merges global config email_cc with per-draft cc_emails without duplicates."""
+        combined: List[str] = []
+        for addr in list(getattr(self.config, "email_cc", None) or []) + list(cc_emails or []):
+            clean = str(addr).strip()
+            if clean and clean.lower() not in [existing.lower() for existing in combined]:
+                combined.append(clean)
+        return combined
+
     def _create_draft_via_owa(
         self,
         token: str,
@@ -438,6 +447,7 @@ class M365GraphDraftManager:
         subject: str,
         html_body: str,
         attachments: Optional[List[Path]] = None,
+        cc_emails: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Creates a draft message in Outlook.com / Exchange Online via OWA service.svc CreateItem."""
         item_dict: Dict[str, Any] = {
@@ -457,10 +467,11 @@ class M365GraphDraftManager:
             ],
         }
 
-        if getattr(self.config, "email_cc", None):
+        merged_cc = self._merge_cc(cc_emails)
+        if merged_cc:
             item_dict["CcRecipients"] = [
                 {"__type": "EmailAddressWrapper:#Exchange", "EmailAddress": addr}
-                for addr in self.config.email_cc
+                for addr in merged_cc
             ]
         if getattr(self.config, "email_bcc", None):
             item_dict["BccRecipients"] = [
@@ -588,6 +599,7 @@ class M365GraphDraftManager:
         html_body: str,
         text_body: str = "",
         attachments: Optional[List[Path]] = None,
+        cc_emails: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Creates a draft message in Microsoft 365 / Outlook.com via Graph API or OWA service.
 
@@ -611,6 +623,7 @@ class M365GraphDraftManager:
                 subject=subject,
                 html_body=html_body,
                 attachments=attachments,
+                cc_emails=cc_emails,
             )
 
         message_payload: Dict[str, Any] = {
@@ -630,9 +643,10 @@ class M365GraphDraftManager:
             "isDraft": True,
         }
 
-        if getattr(self.config, "email_cc", None):
+        merged_cc = self._merge_cc(cc_emails)
+        if merged_cc:
             message_payload["ccRecipients"] = [
-                {"emailAddress": {"address": addr}} for addr in self.config.email_cc
+                {"emailAddress": {"address": addr}} for addr in merged_cc
             ]
         if getattr(self.config, "email_bcc", None):
             message_payload["bccRecipients"] = [

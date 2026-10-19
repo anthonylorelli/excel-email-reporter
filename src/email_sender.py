@@ -24,6 +24,7 @@ class EmailSender:
         text_body: str,
         recipients: List[str],
         attachments: Optional[List[Path]] = None,
+        cc: Optional[List[str]] = None,
     ) -> MIMEMultipart:
         """Constructs a MIME multi-part email with both HTML and plain-text alternatives, plus attachments."""
         msg = MIMEMultipart("mixed")
@@ -31,8 +32,13 @@ class EmailSender:
         msg["From"] = self.config.email_sender
         msg["To"] = ", ".join(recipients)
 
-        if self.config.email_cc:
-            msg["Cc"] = ", ".join(self.config.email_cc)
+        combined_cc: List[str] = []
+        for addr in list(getattr(self.config, "email_cc", None) or []) + list(cc or []):
+            if addr and addr.lower() not in [existing.lower() for existing in combined_cc]:
+                combined_cc.append(addr)
+
+        if combined_cc:
+            msg["Cc"] = ", ".join(combined_cc)
 
         # Alternative body part (text + html)
         alt_part = MIMEMultipart("alternative")
@@ -74,6 +80,7 @@ class EmailSender:
         text_body: str,
         output_eml_path: Path,
         attachments: Optional[List[Path]] = None,
+        cc_emails: Optional[List[str]] = None,
     ) -> Path:
         """Saves an email draft as an RFC 822 .eml file with X-Unsent: 1 header.
         
@@ -89,6 +96,7 @@ class EmailSender:
             text_body=text_body,
             recipients=[to_header],
             attachments=attachments,
+            cc=cc_emails,
         )
         
         # Mark as draft for Outlook / Windows Mail / Thunderbird

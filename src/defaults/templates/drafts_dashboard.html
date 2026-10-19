@@ -55,6 +55,7 @@
           <tr>
             <th>Student Name</th>
             <th>Email</th>
+            <th>Parent CC</th>
             <th class="num">Overall %</th>
             <th>Grade</th>
             <th class="num">Missing Work</th>
@@ -66,6 +67,7 @@
           <tr>
             <td><strong>{{ student.full_name }}</strong></td>
             <td style="color: #64748b;">{{ student.email }}</td>
+            <td style="color: #64748b; font-size: 12px;">{{ student.parent_emails or "—" }}</td>
             <td class="num"><strong>{{ student.overall_percent }}%</strong></td>
             <td>
               <span class="badge grade-{{ student.letter_grade[0] }}">{{ student.letter_grade }}</span>

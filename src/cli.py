@@ -110,6 +110,7 @@ def run_grade_pipeline(
     explicit_files: Optional[List[str]] = None,
     output_dir: str = "output/drafts",
     draft_target: Optional[str] = None,
+    contacts_dir: Optional[str] = None,
 ) -> int:
     """Processes student assignment data, calculates weighted grades, and creates individual email drafts."""
     print("=" * 65)
@@ -142,6 +143,10 @@ def run_grade_pipeline(
     for f in target_files:
         print(f"   - {f.name}")
 
+    parent_contacts = extractor.load_parent_contacts(contacts_dir)
+    if parent_contacts:
+        print(f"  Loaded parent contact emails for {len(parent_contacts)} student(s) (will be added on CC)")
+
     calculator = GradeCalculator(category_weights=cat_weights)
     generator = ReportGenerator(config)
     sender = EmailSender(config)
@@ -161,7 +166,11 @@ def run_grade_pipeline(
             df, raw_count = extractor.extract_from_file(file_path)
             course_name = df["_course_name"].iloc[0] if "_course_name" in df.columns and not df.empty else file_path.stem
             
-            profiles = calculator.process_records(df, course_name=course_name)
+            profiles = calculator.process_records(
+                df,
+                course_name=course_name,
+                parent_contacts=parent_contacts,
+            )
             if not profiles:
                 print(f"  [!] No valid student records extracted from: {file_path.name}")
                 continue
@@ -200,6 +209,7 @@ def run_grade_pipeline(
                         subject=subject,
                         html_body=rendered["html"],
                         text_body=rendered["text"],
+                        cc_emails=profile.parent_emails,
                     )
                     if res["success"]:
                         in_outlook = True
@@ -218,6 +228,7 @@ def run_grade_pipeline(
                         html_body=rendered["html"],
                         text_body=rendered["text"],
                         output_eml_path=eml_path,
+                        cc_emails=profile.parent_emails,
                     )
 
                 # Save companion standalone HTML preview for easy inspection
@@ -227,6 +238,7 @@ def run_grade_pipeline(
                     "full_name": profile.full_name,
                     "first_name": profile.first_name,
                     "email": profile.email,
+                    "parent_emails": ", ".join(profile.parent_emails),
                     "overall_percent": profile.overall_percent,
                     "letter_grade": profile.letter_grade,
                     "total_graded": profile.total_graded,
@@ -343,6 +355,12 @@ def main():
         help="Directory to save generated attachments, previews, or drafts",
     )
     parser.add_argument(
+        "--contacts-dir",
+        type=str,
+        default=None,
+        help="Directory containing parent contact spreadsheets (default: data/contacts)",
+    )
+    parser.add_argument(
         "--generate-samples",
         action="store_true",
         help="Generate sample Excel spreadsheets for demonstration and testing",
@@ -350,7 +368,7 @@ def main():
     parser.add_argument(
         "--init",
         action="store_true",
-        help="Initialize local config/, templates/, data/grades/, and output/drafts/ folders in the current directory",
+        help="Initialize local config/, templates/, data/grades/, data/contacts/, and output/drafts/ folders in the current directory",
     )
     from src import __version__
     parser.add_argument(
@@ -375,7 +393,7 @@ def main():
                         print(f"  [+] Created {target}")
                     else:
                         print(f"  [=] Skipped {target} (already exists)")
-        for folder in [Path("data/grades"), Path("output/drafts")]:
+        for folder in [Path("data/grades"), Path("data/contacts"), Path("output/drafts")]:
             folder.mkdir(parents=True, exist_ok=True)
             print(f"  [+] Ensured directory {folder}/")
         print(f"\nWorkspace initialized in: {Path.cwd()}")
@@ -404,11 +422,13 @@ def main():
 
     if is_grades:
         out_dir = args.output_dir or getattr(config, "output_drafts_dir", "output/drafts")
+        contacts_dir = args.contacts_dir or config.data_sources.get("contacts_directory") or getattr(config, "contacts_directory", None)
         exit_code = run_grade_pipeline(
             config=config,
             explicit_files=args.files,
             output_dir=out_dir,
             draft_target=args.draft_target,
+            contacts_dir=contacts_dir,
         )
     else:
         is_dry_run = not args.send or args.dry_run

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "excel-email-reporter"
-version = "0.2.0"
+version = "0.3.0"
 description = "Export and aggregate data from Excel spreadsheets and send formatted HTML/text email reports"
 readme = "README.md"
 requires-python = ">=3.9"

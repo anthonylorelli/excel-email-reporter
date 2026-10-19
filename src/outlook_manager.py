@@ -49,6 +49,15 @@ class OutlookDraftManager:
             self._com_app = win32com.client.Dispatch("Outlook.Application")
         return self._com_app
 
+    def _merge_cc(self, cc_emails: Optional[List[str]] = None) -> List[str]:
+        """Merges global config email_cc with per-draft cc_emails without duplicates."""
+        combined: List[str] = []
+        for addr in list(getattr(self.config, "email_cc", None) or []) + list(cc_emails or []):
+            clean = str(addr).strip()
+            if clean and clean.lower() not in [existing.lower() for existing in combined]:
+                combined.append(clean)
+        return combined
+
     def create_draft_via_com(
         self,
         recipient_email: str,
@@ -56,6 +65,7 @@ class OutlookDraftManager:
         subject: str,
         html_body: str,
         attachments: Optional[List[Path]] = None,
+        cc_emails: Optional[List[str]] = None,
     ) -> bool:
         """Populates and saves a draft email directly in Outlook's local Drafts folder via COM."""
         outlook = self.get_or_create_com_app()
@@ -64,6 +74,11 @@ class OutlookDraftManager:
 
         # Set headers & body
         mail.To = f'"{recipient_name}" <{recipient_email}>' if recipient_name else recipient_email
+        merged_cc = self._merge_cc(cc_emails)
+        if merged_cc:
+            mail.CC = "; ".join(merged_cc)
+        if getattr(self.config, "email_bcc", None):
+            mail.BCC = "; ".join(self.config.email_bcc)
         mail.Subject = subject
         mail.HTMLBody = html_body
 
@@ -121,6 +136,7 @@ class OutlookDraftManager:
         html_body: str,
         text_body: str,
         attachments: Optional[List[Path]] = None,
+        cc_emails: Optional[List[str]] = None,
     ) -> bool:
         """Appends a draft email to the server's Drafts folder via IMAP SSL (syncs into Outlook)."""
         client = self._get_imap_client()
@@ -133,6 +149,9 @@ class OutlookDraftManager:
         msg["From"] = sender_header
         to_header = f'"{recipient_name}" <{recipient_email}>' if recipient_name else recipient_email
         msg["To"] = to_header
+        merged_cc = self._merge_cc(cc_emails)
+        if merged_cc:
+            msg["Cc"] = ", ".join(merged_cc)
         msg["X-Unsent"] = "1"
 
         alt_part = MIMEMultipart("alternative")
@@ -173,6 +192,7 @@ class OutlookDraftManager:
         html_body: str,
         text_body: str,
         attachments: Optional[List[Path]] = None,
+        cc_emails: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Attempts to save a draft directly into Outlook.
 
@@ -196,6 +216,7 @@ class OutlookDraftManager:
                 html_body=html_body,
                 text_body=text_body,
                 attachments=attachments,
+                cc_emails=cc_emails,
             )
             if res["success"]:
                 return res
@@ -212,6 +233,7 @@ class OutlookDraftManager:
                         subject=subject,
                         html_body=html_body,
                         attachments=attachments,
+                        cc_emails=cc_emails,
                     )
                     return {"success": True, "method": "com", "error": None}
                 except Exception as ex:
@@ -230,6 +252,7 @@ class OutlookDraftManager:
                         html_body=html_body,
                         text_body=text_body,
                         attachments=attachments,
+                        cc_emails=cc_emails,
                     )
                     return {"success": True, "method": "imap", "error": None}
                 except Exception as imap_ex:

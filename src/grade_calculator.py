@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 
 
@@ -47,6 +47,7 @@ class StudentGradeProfile:
     missing_assignments: List[AssignmentRecord] = field(default_factory=list)
     total_graded: int = 0
     total_missing: int = 0
+    parent_emails: List[str] = field(default_factory=list)
 
 
 DEFAULT_CATEGORY_WEIGHTS: Dict[str, float] = {
@@ -121,6 +122,7 @@ class GradeCalculator:
         self,
         df: pd.DataFrame,
         course_name: str = "Class Report",
+        parent_contacts: Optional[Dict[Tuple[str, str], List[str]]] = None,
     ) -> List[StudentGradeProfile]:
         """Processes tabular assignment data into a list of StudentGradeProfile objects.
         
@@ -156,9 +158,28 @@ class GradeCalculator:
                 continue
 
             first_row = student_df.iloc[0]
-            first_name = str(first_row.get(first_col, "")) if first_col in first_row else ""
-            last_name = str(first_row.get(last_col, "")) if last_col in first_row else ""
-            email = str(first_row.get(email_col, "")) if email_col in first_row else ""
+            first_name = str(first_row.get(first_col, "")) if first_col in first_row and pd.notna(first_row.get(first_col)) else ""
+            last_name = str(first_row.get(last_col, "")) if last_col in first_row and pd.notna(first_row.get(last_col)) else ""
+            email = str(first_row.get(email_col, "")) if email_col in first_row and pd.notna(first_row.get(email_col)) else ""
+
+            full_str = str(student_name).strip()
+            if (not first_name.strip() or not last_name.strip()) and " " in full_str:
+                parts = full_str.split()
+                if not first_name.strip():
+                    first_name = parts[0]
+                if not last_name.strip():
+                    last_name = parts[-1]
+
+            matched_parents: List[str] = []
+            if parent_contacts:
+                lookup_key = (first_name.strip().lower(), last_name.strip().lower())
+                if lookup_key in parent_contacts:
+                    matched_parents = list(parent_contacts[lookup_key])
+                elif " " in full_str:
+                    parts = full_str.split()
+                    alt_key = (parts[0].strip().lower(), parts[-1].strip().lower())
+                    if alt_key in parent_contacts:
+                        matched_parents = list(parent_contacts[alt_key])
 
             # Initialize category summaries with configured weights
             cat_summaries: Dict[str, CategorySummary] = {
@@ -267,7 +288,7 @@ class GradeCalculator:
             profiles.append(
                 StudentGradeProfile(
                     course_name=course_name,
-                    full_name=str(student_name).strip(),
+                    full_name=full_str,
                     first_name=first_name.strip(),
                     last_name=last_name.strip(),
                     email=email.strip(),
@@ -278,6 +299,7 @@ class GradeCalculator:
                     missing_assignments=missing_list,
                     total_graded=len(graded_list),
                     total_missing=len(missing_list),
+                    parent_emails=matched_parents,
                 )
             )
 

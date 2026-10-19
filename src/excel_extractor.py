@@ -143,3 +143,81 @@ class ExcelExtractor:
             df[export_cols].to_excel(writer, sheet_name="Consolidated_Report", index=False)
 
         return out
+
+    def load_parent_contacts(
+        self, contacts_dir: Optional[str] = None
+    ) -> Dict[Tuple[str, str], List[str]]:
+        """Loads parent contact email addresses from *.xlsx files in contacts_dir.
+
+        Matches each row by student first and last name (Registrant First Name / Registrant Last Name)
+        and maps (first_name_lower, last_name_lower) -> list of parent email addresses.
+        """
+        from src.config import resolve_resource_path
+
+        directory = contacts_dir or self.config.get("contacts_directory", "data/contacts")
+        resolved = resolve_resource_path(directory)
+        dir_path = resolved if resolved and resolved.exists() else Path(directory)
+        if not dir_path.exists():
+            return {}
+
+        pattern = self.config.get("contacts_file_pattern", "*.xlsx")
+        files = [
+            Path(p)
+            for p in sorted(glob.glob(str(dir_path / pattern)))
+            if not Path(p).name.startswith("~$")
+        ]
+
+        contacts_map: Dict[Tuple[str, str], List[str]] = {}
+        for filepath in files:
+            try:
+                sheets = pd.read_excel(filepath, sheet_name=None)
+            except Exception:
+                continue
+
+            for _, sheet_df in sheets.items():
+                if sheet_df.empty:
+                    continue
+                cols = {str(c).lower().strip(): c for c in sheet_df.columns}
+                first_col = (
+                    cols.get("registrant first name")
+                    or cols.get("student first name")
+                    or cols.get("first name")
+                )
+                last_col = (
+                    cols.get("registrant last name")
+                    or cols.get("student last name")
+                    or cols.get("last name")
+                )
+                parent_email_col = (
+                    cols.get("email address")
+                    or cols.get("parent email")
+                    or cols.get("primary email")
+                )
+                if not (first_col and last_col and parent_email_col):
+                    continue
+
+                for _, row in sheet_df.iterrows():
+                    raw_first = row.get(first_col)
+                    raw_last = row.get(last_col)
+                    raw_email = row.get(parent_email_col)
+                    if pd.isna(raw_first) or pd.isna(raw_last) or pd.isna(raw_email):
+                        continue
+
+                    s_first = str(raw_first).strip().lower()
+                    s_last = str(raw_last).strip().lower()
+                    p_email_str = str(raw_email).strip()
+                    if not s_first or not s_last or not p_email_str or p_email_str.lower() == "nan":
+                        continue
+
+                    key = (s_first, s_last)
+                    if key not in contacts_map:
+                        contacts_map[key] = []
+
+                    for part in p_email_str.replace(";", ",").split(","):
+                        addr = part.strip()
+                        if addr and "@" in addr:
+                            if addr.lower() not in [e.lower() for e in contacts_map[key]]:
+                                contacts_map[key].append(addr)
+
+        return contacts_map
+
